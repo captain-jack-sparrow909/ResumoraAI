@@ -5,7 +5,7 @@ import type { ResumeAnalysis, ResumeDocument } from "@resumora/domain";
 import { analyzeResume, demoResume } from "@resumora/domain";
 import {
   ArrowLeft, Check, ChevronDown, CircleUserRound, Clock3, Download, FileText,
-  GraduationCap, History, LayoutTemplate, LoaderCircle, Mail, PanelRightClose,
+  GraduationCap, History, LayoutTemplate, LoaderCircle, PanelRightClose,
   PanelRightOpen, Plus, Printer, Save, ScanSearch, Sparkles, Upload, WandSparkles,
   X,
 } from "lucide-react";
@@ -51,18 +51,20 @@ export function BuilderStudio() {
   const analysis: ResumeAnalysis = useMemo(() => analyzeResume(resume), [resume]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("resumora:resume");
-    const storedVersions = localStorage.getItem("resumora:versions");
-    if (stored) {
-      try { setResume(JSON.parse(stored)); } catch { /* retain demo */ }
-    }
-    if (storedVersions) {
-      try { setVersions(JSON.parse(storedVersions)); } catch { /* ignore invalid local data */ }
-    }
+    const timeout = window.setTimeout(() => {
+      const stored = localStorage.getItem("resumora:resume");
+      const storedVersions = localStorage.getItem("resumora:versions");
+      if (stored) {
+        try { setResume(JSON.parse(stored)); } catch { /* retain demo */ }
+      }
+      if (storedVersions) {
+        try { setVersions(JSON.parse(storedVersions)); } catch { /* ignore invalid local data */ }
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    setStatus("Saving…");
     const timeout = window.setTimeout(() => {
       localStorage.setItem("resumora:resume", JSON.stringify(resume));
       setStatus("Saved locally");

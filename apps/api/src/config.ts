@@ -1,3 +1,10 @@
+import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
+
+// Local monorepo development uses the root .env. Render-injected values
+// already exist in process.env and therefore keep precedence.
+loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
+
 const value = (name: string) => process.env[name]?.trim() || undefined;
 
 export const config = {
@@ -7,8 +14,9 @@ export const config = {
     .map((origin) => origin.trim()),
   supabase: {
     url: value("SUPABASE_URL"),
-    anonKey: value("SUPABASE_ANON_KEY"),
-    serviceRoleKey: value("SUPABASE_SERVICE_ROLE_KEY"),
+    publishableKey: value("SUPABASE_PUBLISHABLE_KEY") ?? value("SUPABASE_ANON_KEY"),
+    secretKey: value("SUPABASE_SECRET_KEY") ?? value("SUPABASE_SERVICE_ROLE_KEY"),
+    jwksUrl: value("SUPABASE_JWKS_URL"),
   },
   deepseek: {
     apiKey: value("DEEPSEEK_API_KEY"),
@@ -19,12 +27,13 @@ export const config = {
     accountId: value("R2_ACCOUNT_ID"),
     accessKeyId: value("R2_ACCESS_KEY_ID"),
     secretAccessKey: value("R2_SECRET_ACCESS_KEY"),
-    bucket: value("R2_BUCKET") ?? "resumora-documents",
+    bucket: value("R2_BUCKET") ?? "resumora-ai",
+    endpoint: value("R2_S3_ENDPOINT"),
   },
 };
 
 export const capabilities = {
-  database: Boolean(config.supabase.url && config.supabase.anonKey && config.supabase.serviceRoleKey),
+  database: Boolean(config.supabase.url && config.supabase.publishableKey && config.supabase.secretKey),
   ai: Boolean(config.deepseek.apiKey),
-  storage: Boolean(config.r2.accountId && config.r2.accessKeyId && config.r2.secretAccessKey),
+  storage: Boolean((config.r2.endpoint || config.r2.accountId) && config.r2.accessKeyId && config.r2.secretAccessKey),
 };

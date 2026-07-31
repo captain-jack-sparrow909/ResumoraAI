@@ -16,6 +16,7 @@
     "@fastify/multipart": "^9.2.1",
     "@resumora/domain": "0.1.0",
     "@supabase/supabase-js": "^2.54.0",
+    "dotenv": "^17.2.1",
     "fastify": "^5.4.0",
     "mammoth": "^1.10.0",
     "pdf-parse": "^1.1.1",

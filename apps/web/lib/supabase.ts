@@ -5,7 +5,9 @@ let client: SupabaseClient | null | undefined;
 export function getSupabaseBrowserClient() {
   if (client !== undefined) return client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  client = url && anonKey ? createClient(url, anonKey) : null;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  client = url && publishableKey ? createClient(url, publishableKey) : null;
   return client;
 }

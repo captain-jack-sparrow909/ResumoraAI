@@ -18,18 +18,21 @@ services:
         sync: false
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_JWKS_URL
         sync: false
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_S3_ENDPOINT
         sync: false
       - key: R2_ACCESS_KEY_ID
         sync: false
       - key: R2_SECRET_ACCESS_KEY
         sync: false
       - key: R2_BUCKET
-        value: resumora-documents
-
+        sync: false

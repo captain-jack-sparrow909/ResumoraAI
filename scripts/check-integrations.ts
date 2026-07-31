@@ -1,0 +1,96 @@
+import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
+import { createClient } from "@supabase/supabase-js";
+import { capabilities, config } from "../apps/api/src/config.js";
+
+type Result = { service: string; ok: boolean; detail: string };
+const results: Result[] = [];
+
+const record = (service: string, ok: boolean, detail: string) => {
+  results.push({ service, ok, detail });
+};
+
+async function checkDeepSeek() {
+  if (!config.deepseek.apiKey) return record("DeepSeek", false, "API key is missing");
+  try {
+    const response = await fetch(`${config.deepseek.baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${config.deepseek.apiKey}` },
+      signal: AbortSignal.timeout(12_000),
+    });
+    record("DeepSeek", response.ok, response.ok ? `credentials accepted; configured model ${config.deepseek.model}` : `credential check returned HTTP ${response.status}`);
+  } catch {
+    record("DeepSeek", false, "could not reach the configured API endpoint");
+  }
+}
+
+async function checkSupabase() {
+  const { url, publishableKey, secretKey, jwksUrl } = config.supabase;
+  if (!url || !publishableKey || !secretKey) {
+    record("Supabase Auth", false, "URL, publishable key, or secret key is missing");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${url}/auth/v1/settings`, {
+      headers: { apikey: publishableKey },
+      signal: AbortSignal.timeout(12_000),
+    });
+    record("Supabase Auth", response.ok, response.ok ? "publishable key accepted" : `returned HTTP ${response.status}`);
+  } catch {
+    record("Supabase Auth", false, "could not reach the project auth endpoint");
+  }
+
+  try {
+    const admin = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { error } = await admin.from("resumes").select("id", { head: true, count: "exact" }).limit(1);
+    record("Supabase DB", !error, error ? `schema check failed (${error.code ?? "database error"}); apply the Phase 1 migration` : "secret key accepted and resumes table is available");
+  } catch {
+    record("Supabase DB", false, "could not query the project database");
+  }
+
+  if (jwksUrl) {
+    try {
+      const response = await fetch(jwksUrl, { signal: AbortSignal.timeout(12_000) });
+      const body = response.ok ? await response.json() as { keys?: unknown[] } : null;
+      record("Supabase JWKS", Boolean(response.ok && body?.keys?.length), response.ok && body?.keys?.length ? `${body.keys.length} signing key(s) available` : `returned HTTP ${response.status}`);
+    } catch {
+      record("Supabase JWKS", false, "could not load signing keys");
+    }
+  } else {
+    record("Supabase JWKS", false, "JWKS URL is missing");
+  }
+}
+
+async function checkR2() {
+  const { endpoint, accountId, accessKeyId, secretAccessKey, bucket } = config.r2;
+  const resolvedEndpoint = endpoint ?? (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
+  if (!resolvedEndpoint || !accessKeyId || !secretAccessKey || !bucket) {
+    record("Cloudflare R2", false, "endpoint, credentials, or bucket name is missing");
+    return;
+  }
+  try {
+    const client = new S3Client({
+      region: "auto",
+      endpoint: resolvedEndpoint,
+      credentials: { accessKeyId, secretAccessKey },
+    });
+    await client.send(new HeadBucketCommand({ Bucket: bucket }));
+    record("Cloudflare R2", true, `bucket ${bucket} is reachable`);
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "request error";
+    record("Cloudflare R2", false, `bucket check failed (${name})`);
+  }
+}
+
+async function main() {
+  await Promise.all([checkDeepSeek(), checkSupabase(), checkR2()]);
+
+  console.log("Resumora integration audit\n");
+  for (const result of results) {
+    console.log(`${result.ok ? "PASS" : "FAIL"}  ${result.service.padEnd(16)} ${result.detail}`);
+  }
+  console.log(`\nConfigured capabilities: database=${capabilities.database}, storage=${capabilities.storage}, ai=${capabilities.ai}`);
+
+  if (results.some((result) => !result.ok)) process.exitCode = 1;
+}
+
+void main();

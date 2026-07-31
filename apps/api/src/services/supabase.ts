@@ -6,16 +6,16 @@ let adminClient: SupabaseClient | null = null;
 let authClient: SupabaseClient | null = null;
 
 export function getSupabaseAdmin() {
-  if (!config.supabase.url || !config.supabase.serviceRoleKey) return null;
-  adminClient ??= createClient(config.supabase.url, config.supabase.serviceRoleKey, {
+  if (!config.supabase.url || !config.supabase.secretKey) return null;
+  adminClient ??= createClient(config.supabase.url, config.supabase.secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return adminClient;
 }
 
 export function getSupabaseAuth() {
-  if (!config.supabase.url || !config.supabase.anonKey) return null;
-  authClient ??= createClient(config.supabase.url, config.supabase.anonKey, {
+  if (!config.supabase.url || !config.supabase.publishableKey) return null;
+  authClient ??= createClient(config.supabase.url, config.supabase.publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return authClient;
