@@ -57,6 +57,20 @@ async function checkSupabase() {
         ? `table ${missingPhaseTwo.table} failed (${missingPhaseTwo.result.error?.code ?? "database error"}); apply the Phase 2 migration`
         : "all four job intelligence tables are available",
     );
+    const phaseThreeChecks = await Promise.all(
+      ["applications", "application_activities", "interview_packs", "application_reviews"].map(async (table) => ({
+        table,
+        result: await admin.from(table).select("id", { head: true, count: "exact" }).limit(1),
+      })),
+    );
+    const missingPhaseThree = phaseThreeChecks.find(({ result }) => result.error);
+    record(
+      "Supabase Phase 3",
+      !missingPhaseThree,
+      missingPhaseThree
+        ? `table ${missingPhaseThree.table} failed (${missingPhaseThree.result.error?.code ?? "database error"}); apply the Phase 3 migration`
+        : "all four application workspace tables are available",
+    );
   } catch {
     record("Supabase DB", false, "could not query the project database");
   }

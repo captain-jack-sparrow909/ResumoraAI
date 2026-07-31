@@ -1,4 +1,4 @@
-# Resumora architecture decisions through Phase 2
+# Resumora architecture decisions through Phase 3
 
 ## Deployment boundary
 
@@ -33,6 +33,16 @@ Phase 2 adds a separate job-match report with hard-skill, keyword, evidence-stre
 Job descriptions first pass through a deterministic parser, then optionally through DeepSeek for structured extraction. The deterministic result is both a fallback and a constrained draft. Required and preferred qualifications remain separate throughout scoring and UI.
 
 The Career Vault is the only evidence store AI may cite beyond facts already present in the resume. Tailoring returns proposals—not mutations—with source evidence IDs, added keywords, rationale, and unsupported-claim flags. The client disables acceptance when a proposal has no recognized evidence or contains unsupported language.
+
+## Application lifecycle
+
+Phase 3 treats an application as a durable aggregate rather than a card containing only a company name. Each record can retain the job snapshot, targeted resume ID, cover-letter snapshot, match signal, private notes, next action, due date, and applied date. The lifecycle is constrained to `saved → preparing → applied → interview → offer`, with `rejected` and `withdrawn` as archived outcomes.
+
+Every meaningful change can create an append-only activity entry. Application records remain editable, while status, review, asset, and interview events preserve the decision trail. Guest records use the same shared schema in local storage; authenticated records sync through owner-scoped API routes and Supabase Row Level Security.
+
+## Interview preparation
+
+Interview packs combine the targeted resume, structured job analysis, and verified Career Vault records. A deterministic generator guarantees useful local preparation. DeepSeek can refine the pack, but returned evidence IDs are filtered server-side against the supplied verified records. Packs contain likely questions, why each is asked, an answer framework, evidence links, likely themes, and questions for the interviewer.
 
 ## Persistence
 

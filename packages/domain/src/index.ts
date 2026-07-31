@@ -479,3 +479,229 @@ export const demoCareerEvidence: CareerEvidence[] = [
     source: "resume_import",
   },
 ];
+
+export const applicationStatusSchema = z.enum([
+  "saved",
+  "preparing",
+  "applied",
+  "interview",
+  "offer",
+  "rejected",
+  "withdrawn",
+]);
+
+export const applicationCoverLetterSchema = z.object({
+  subject: z.string(),
+  letter: z.string(),
+  evidenceIds: z.array(z.string()).default([]),
+  model: z.string().default(""),
+});
+
+export const applicationSchema = z.object({
+  id: z.string(),
+  jobId: z.string().optional(),
+  role: z.string(),
+  company: z.string().default(""),
+  location: z.string().default(""),
+  sourceUrl: z.string().default(""),
+  status: applicationStatusSchema.default("saved"),
+  matchScore: z.number().int().min(0).max(100).default(0),
+  resumeId: z.string().optional(),
+  coverLetterId: z.string().optional(),
+  coverLetter: applicationCoverLetterSchema.optional(),
+  notes: z.string().default(""),
+  nextAction: z.string().default(""),
+  nextActionAt: z.string().nullable().default(null),
+  appliedAt: z.string().nullable().default(null),
+  job: jobAnalysisSchema.optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const applicationActivitySchema = z.object({
+  id: z.string(),
+  applicationId: z.string(),
+  kind: z.enum(["created", "status", "note", "asset", "interview", "review"]),
+  message: z.string(),
+  metadata: z.record(z.unknown()).default({}),
+  createdAt: z.string(),
+});
+
+export const interviewQuestionSchema = z.object({
+  id: z.string(),
+  category: z.enum(["role", "behavioral", "technical", "leadership", "company"]),
+  question: z.string(),
+  whyAsked: z.string(),
+  answerFramework: z.string(),
+  evidenceIds: z.array(z.string()).default([]),
+});
+
+export const interviewPackSchema = z.object({
+  applicationId: z.string(),
+  questions: z.array(interviewQuestionSchema).max(12),
+  themes: z.array(z.string()).max(12),
+  questionsForInterviewer: z.array(z.string()).max(8),
+  model: z.string(),
+  generatedAt: z.string(),
+});
+
+export type ApplicationStatus = z.infer<typeof applicationStatusSchema>;
+export type JobApplication = z.infer<typeof applicationSchema>;
+export type ApplicationActivity = z.infer<typeof applicationActivitySchema>;
+export type InterviewQuestion = z.infer<typeof interviewQuestionSchema>;
+export type InterviewPack = z.infer<typeof interviewPackSchema>;
+
+export const activeApplicationStatuses: ApplicationStatus[] = ["saved", "preparing", "applied", "interview", "offer"];
+
+export function buildInterviewPrep(applicationId: string, job: JobAnalysis, evidence: CareerEvidence[]): InterviewPack {
+  const verified = evidence.filter((item) => item.verified);
+  const evidenceFor = (terms: string[]) => verified
+    .filter((item) => terms.some((term) => includesTerm(`${item.title} ${item.description} ${item.skills.join(" ")}`, term)))
+    .map((item) => item.id)
+    .slice(0, 3);
+  const leadResponsibility = job.responsibilities[0] ?? `deliver strong outcomes as ${job.role}`;
+  const keySkill = job.requiredSkills[0] ?? job.keywords[0] ?? "your core discipline";
+  const secondSkill = job.requiredSkills[1] ?? job.preferredSkills[0] ?? "cross-functional collaboration";
+  const questions: InterviewQuestion[] = [
+    {
+      id: "interview-role-impact",
+      category: "role",
+      question: `Tell me about a project that best demonstrates your readiness to ${leadResponsibility.toLowerCase()}`,
+      whyAsked: "Connects your strongest verified outcome to the role's highest-priority responsibility.",
+      answerFramework: "Situation → your exact responsibility → decisions you made → measurable result → what you learned.",
+      evidenceIds: evidenceFor([keySkill, ...job.keywords.slice(0, 3)]),
+    },
+    {
+      id: "interview-skill-depth",
+      category: "technical",
+      question: `Walk me through how you apply ${keySkill} when the problem is ambiguous.`,
+      whyAsked: `Tests practical depth in a required capability: ${keySkill}.`,
+      answerFramework: "Clarify the constraint → explain your method → show a tradeoff → cite an outcome.",
+      evidenceIds: evidenceFor([keySkill]),
+    },
+    {
+      id: "interview-collaboration",
+      category: "behavioral",
+      question: `Describe a time you used ${secondSkill} to resolve disagreement or unblock delivery.`,
+      whyAsked: "Evaluates how you work across functions, not only the quality of the final output.",
+      answerFramework: "Name the disagreement → show how you listened → explain the decision mechanism → quantify the result.",
+      evidenceIds: evidenceFor([secondSkill, "stakeholder management", "leadership"]),
+    },
+    {
+      id: "interview-failure",
+      category: "behavioral",
+      question: "Tell me about a decision that did not work as expected. What changed in your approach afterward?",
+      whyAsked: "Tests judgment, accountability, and learning without rewarding a disguised success story.",
+      answerFramework: "Own the decision → state the missed signal → explain the correction → show the lasting change.",
+      evidenceIds: verified.slice(0, 2).map((item) => item.id),
+    },
+    {
+      id: "interview-leadership",
+      category: "leadership",
+      question: `How would you create alignment around ${job.responsibilities[1]?.toLowerCase() ?? `the priorities of this ${job.role} role`}?`,
+      whyAsked: "Reveals how you turn incomplete information into an executable team decision.",
+      answerFramework: "Stakeholders → evidence needed → decision criteria → communication rhythm → success measure.",
+      evidenceIds: evidenceFor(["leadership", "stakeholder management", "strategy"]),
+    },
+    {
+      id: "interview-first-90",
+      category: "company",
+      question: `What would you want to understand in your first 30 days as ${job.role}?`,
+      whyAsked: "Tests preparation, prioritization, and whether you ask before prescribing.",
+      answerFramework: "People → customers → product/system → success measures → first low-risk contribution.",
+      evidenceIds: [],
+    },
+  ];
+  return {
+    applicationId,
+    questions,
+    themes: unique([keySkill, secondSkill, ...job.requiredSkills, ...job.responsibilities.slice(0, 3)]).slice(0, 8),
+    questionsForInterviewer: [
+      "What outcomes would make this hire an exceptional success after six months?",
+      `Where does ${job.requiredSkills[0] ?? "this role's core work"} currently create the most friction for the team?`,
+      "How are important cross-functional decisions made when priorities conflict?",
+      "What has changed about this role since the last person held it?",
+    ],
+    model: "deterministic",
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const demoPlatformJob = parseJobDescription(`Senior Product Designer — Platform
+Responsibilities
+Lead customer research and shape complex B2B workflows. Build an accessible design system with engineering.
+Required qualifications
+Figma, user research, prototyping, design systems, and stakeholder management.
+Preferred qualifications
+Amplitude and A/B testing.`);
+
+export const demoApplications: JobApplication[] = [
+  {
+    id: "application-atlas",
+    jobId: "job-atlas-platform",
+    role: "Senior Product Designer — Platform",
+    company: "Atlas",
+    location: "Dubai · Hybrid",
+    sourceUrl: "",
+    status: "preparing",
+    matchScore: 87,
+    resumeId: "resume-demo",
+    notes: "Emphasize enterprise workflows and multi-team design-system adoption.",
+    nextAction: "Review tailored resume and submit",
+    nextActionAt: "2026-08-03T09:00:00.000Z",
+    appliedAt: null,
+    job: { ...demoPlatformJob, company: "Atlas" },
+    createdAt: "2026-07-30T10:00:00.000Z",
+    updatedAt: "2026-07-31T17:30:00.000Z",
+  },
+  {
+    id: "application-lumon",
+    role: "Lead Product Designer",
+    company: "Lumon Health",
+    location: "Remote",
+    sourceUrl: "",
+    status: "applied",
+    matchScore: 81,
+    resumeId: "resume-demo",
+    coverLetterId: "cover-lumon",
+    notes: "Referral from Priya. Portfolio case study sent with application.",
+    nextAction: "Follow up with recruiter",
+    nextActionAt: "2026-08-05T08:00:00.000Z",
+    appliedAt: "2026-07-29T12:00:00.000Z",
+    createdAt: "2026-07-27T09:00:00.000Z",
+    updatedAt: "2026-07-29T12:00:00.000Z",
+  },
+  {
+    id: "application-meridian",
+    role: "Principal Product Designer",
+    company: "Meridian Cloud",
+    location: "Abu Dhabi · Hybrid",
+    sourceUrl: "",
+    status: "interview",
+    matchScore: 91,
+    resumeId: "resume-demo",
+    coverLetterId: "cover-meridian",
+    notes: "Hiring-manager conversation focused on platform strategy and mentoring.",
+    nextAction: "Prepare product critique interview",
+    nextActionAt: "2026-08-02T11:30:00.000Z",
+    appliedAt: "2026-07-22T10:00:00.000Z",
+    job: { ...demoPlatformJob, role: "Principal Product Designer", company: "Meridian Cloud", seniority: "lead" },
+    createdAt: "2026-07-18T08:30:00.000Z",
+    updatedAt: "2026-07-31T13:20:00.000Z",
+  },
+  {
+    id: "application-northstar",
+    role: "Staff Product Designer",
+    company: "Northstar Finance",
+    location: "London · Remote",
+    sourceUrl: "",
+    status: "saved",
+    matchScore: 76,
+    notes: "Research visa and working-hours expectations before tailoring.",
+    nextAction: "Review location requirements",
+    nextActionAt: null,
+    appliedAt: null,
+    createdAt: "2026-07-31T15:00:00.000Z",
+    updatedAt: "2026-07-31T15:00:00.000Z",
+  },
+];

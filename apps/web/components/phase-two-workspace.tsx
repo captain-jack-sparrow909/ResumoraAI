@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, BookOpenCheck, BriefcaseBusiness, Check, ChevronRight, CircleAlert,
-  FileCheck2, FilePenLine, LibraryBig, LoaderCircle, LockKeyhole,
+  FileCheck2, FilePenLine, LayoutDashboard, LibraryBig, LoaderCircle, LockKeyhole,
   Plus, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, WandSparkles, X,
 } from "lucide-react";
 import {
@@ -14,6 +14,7 @@ import {
   scoreJobMatch,
   type CareerEvidence,
   type JobAnalysis,
+  type JobApplication,
   type ResumeDocument,
   type TailoringProposal,
 } from "@resumora/domain";
@@ -23,6 +24,7 @@ import {
   generateCoverLetter,
   getTailoringProposals,
   loadCareerVault,
+  saveApplication,
   saveCareerVault,
   saveJobPosting,
 } from "@/lib/api";
@@ -68,6 +70,7 @@ export function PhaseTwoWorkspace() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [vaultDirty, setVaultDirty] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<"local" | "syncing" | "synced">("local");
+  const [vaultHydrated, setVaultHydrated] = useState(false);
   const report = useMemo(() => scoreJobMatch(resume, job, evidence), [resume, job, evidence]);
 
   useEffect(() => {
@@ -80,6 +83,7 @@ export function PhaseTwoWorkspace() {
       if (storedEvidence) {
         try { setEvidence(JSON.parse(storedEvidence)); } catch { /* keep demo */ }
       }
+      setVaultHydrated(true);
       const supabase = getSupabaseBrowserClient();
       if (supabase) {
         void supabase.auth.getSession().then(async ({ data }) => {
@@ -98,8 +102,9 @@ export function PhaseTwoWorkspace() {
   }, []);
 
   useEffect(() => {
+    if (!vaultHydrated) return;
     localStorage.setItem("resumora:career-vault", JSON.stringify(evidence));
-  }, [evidence]);
+  }, [evidence, vaultHydrated]);
 
   useEffect(() => {
     if (!authToken || !vaultDirty) return;
@@ -183,19 +188,63 @@ export function PhaseTwoWorkspace() {
     setAccepted((current) => [...current, proposal.id]);
   }
 
-  function openTargetedResume() {
+  function createTargetedResume() {
+    const targetJobId = `job-${normalizeId(job.role)}-${Date.now()}`;
     const targeted: ResumeDocument = {
       ...resume,
       id: `resume-${crypto.randomUUID()}`,
       title: `${job.role}${job.company ? ` — ${job.company}` : ""}`,
       sourceResumeId: resume.sourceResumeId ?? resume.id,
-      targetJobId: `job-${normalizeId(job.role)}-${Date.now()}`,
+      targetJobId,
       variantType: "targeted",
       updatedAt: new Date().toISOString(),
     };
+    return targeted;
+  }
+
+  function openTargetedResume() {
+    const targeted = createTargetedResume();
     localStorage.setItem("resumora:resume", JSON.stringify(targeted));
     localStorage.setItem("resumora:targeted-context", JSON.stringify({ job, report, evidenceIds: report.evidenceIds }));
     router.push("/builder");
+  }
+
+  function trackApplication() {
+    const targeted = createTargetedResume();
+    const now = new Date().toISOString();
+    const application: JobApplication = {
+      id: `application-${crypto.randomUUID()}`,
+      jobId: targeted.targetJobId,
+      role: job.role,
+      company: job.company,
+      location: "",
+      sourceUrl: "",
+      status: "preparing",
+      matchScore: report.overall,
+      resumeId: targeted.id,
+      coverLetterId: coverLetter ? `cover-${crypto.randomUUID()}` : undefined,
+      coverLetter: coverLetter ? { subject: coverLetter.subject, letter: coverLetter.letter, evidenceIds: coverLetter.evidenceIds, model: coverLetter.model } : undefined,
+      notes: `Required skills supported: ${report.matchedRequired.length}/${job.requiredSkills.length}. Review ${report.gaps.length} preparation gap${report.gaps.length === 1 ? "" : "s"} before applying.`,
+      nextAction: "Review targeted resume and application pack",
+      nextActionAt: null,
+      appliedAt: null,
+      job,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const stored = localStorage.getItem("resumora:applications");
+    let current: JobApplication[] = [];
+    if (stored) try { current = JSON.parse(stored); } catch { /* start a clean pipeline */ }
+    localStorage.setItem("resumora:applications", JSON.stringify([application, ...current.filter((item) => item.id !== application.id)]));
+    localStorage.setItem("resumora:resume", JSON.stringify(targeted));
+    localStorage.setItem("resumora:targeted-context", JSON.stringify({ job, report, evidenceIds: report.evidenceIds }));
+    const storedActivities = localStorage.getItem("resumora:application-activities");
+    let activityMap: Record<string, unknown[]> = {};
+    if (storedActivities) try { activityMap = JSON.parse(storedActivities); } catch { /* start a clean activity log */ }
+    activityMap[application.id] = [{ id: `activity-${crypto.randomUUID()}`, applicationId: application.id, kind: "created", message: "Application created from job workspace", metadata: { matchScore: report.overall }, createdAt: now }];
+    localStorage.setItem("resumora:application-activities", JSON.stringify(activityMap));
+    if (authToken) void saveApplication(application, authToken).catch(() => undefined);
+    router.push(`/applications?selected=${application.id}`);
   }
 
   return (
@@ -205,6 +254,7 @@ export function PhaseTwoWorkspace() {
         <nav aria-label="Career workspace">
           <button className={view === "tailor" ? "active" : ""} onClick={() => setView("tailor")}><Target size={16} /> Tailor to a job</button>
           <button className={view === "vault" ? "active" : ""} onClick={() => setView("vault")}><LibraryBig size={16} /> Career Vault</button>
+          <button onClick={() => router.push("/applications")}><LayoutDashboard size={16} /> Applications</button>
         </nav>
         <div className="workspace-actions"><span><LockKeyhole size={13} /> {cloudStatus === "syncing" ? "Syncing workspace" : cloudStatus === "synced" ? "Private · synced" : "Private · local"}</span><button onClick={() => router.push("/builder")}>Resume editor <ArrowRight size={15} /></button></div>
       </header>
@@ -261,6 +311,7 @@ export function PhaseTwoWorkspace() {
               <div className="application-actions">
                 <button className="open-editor" onClick={openTargetedResume}><FilePenLine size={16} /> Open targeted resume <ArrowRight size={14} /></button>
                 <button className="cover-action" onClick={runCoverLetter} disabled={coverLoading}>{coverLoading ? <LoaderCircle className="spin" size={15} /> : <FileCheck2 size={15} />} Generate cover letter</button>
+                <button className="track-action" onClick={trackApplication}><LayoutDashboard size={15} /> Track this application</button>
               </div>
               <p className="match-disclaimer">Scores measure preparation signals inside Resumora. Hiring systems and recruiters use different criteria.</p>
             </div>

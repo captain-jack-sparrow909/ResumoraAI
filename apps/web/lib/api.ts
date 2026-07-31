@@ -1,6 +1,9 @@
 import type {
+  ApplicationActivity,
   CareerEvidence,
+  InterviewPack,
   JobAnalysis,
+  JobApplication,
   JobMatchReport,
   ResumeAnalysis,
   ResumeDocument,
@@ -110,4 +113,32 @@ export async function saveJobPosting(description: string, analysis: JobAnalysis,
     description,
     analysis,
   });
+}
+
+export async function loadApplications(token: string) {
+  return authenticatedRequest<{ data: JobApplication[] }>("/v1/applications", token, "GET");
+}
+
+export async function saveApplication(application: JobApplication, token: string) {
+  return authenticatedRequest<{ data: JobApplication }>(`/v1/applications/${application.id}`, token, "PUT", application);
+}
+
+export async function loadApplicationActivity(applicationId: string, token: string) {
+  return authenticatedRequest<{ data: ApplicationActivity[] }>(`/v1/applications/${applicationId}/activities`, token, "GET");
+}
+
+export async function saveApplicationActivity(activity: ApplicationActivity, token: string) {
+  return authenticatedRequest<{ data: ApplicationActivity }>(`/v1/applications/${activity.applicationId}/activities`, token, "POST", activity);
+}
+
+export async function generateInterviewPrep(applicationId: string, resume: ResumeDocument, job: JobAnalysis, evidence: CareerEvidence[]) {
+  return jsonRequest<InterviewPack & { warning?: string }>("/v1/ai/interview-prep", { applicationId, resume, job, evidence });
+}
+
+export async function saveInterviewPack(pack: InterviewPack, token: string) {
+  return authenticatedRequest<{ data: InterviewPack; updatedAt: string }>(`/v1/applications/${pack.applicationId}/interview-pack`, token, "PUT", pack);
+}
+
+export async function loadInterviewPack(applicationId: string, token: string) {
+  return authenticatedRequest<{ data: InterviewPack | null; updatedAt: string | null }>(`/v1/applications/${applicationId}/interview-pack`, token, "GET");
 }

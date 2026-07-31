@@ -3,7 +3,11 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import {
   analyzeResume,
+  applicationActivitySchema,
+  applicationSchema,
+  buildInterviewPrep,
   careerEvidenceSchema,
+  interviewPackSchema,
   jobAnalysisSchema,
   parseJobDescription,
   resumeSchema,
@@ -15,6 +19,7 @@ import {
   analyzeJobWithDeepSeek,
   rewriteWithDeepSeek,
   tailorResumeWithDeepSeek,
+  prepareInterviewWithDeepSeek,
   writeCoverLetterWithDeepSeek,
 } from "./services/deepseek.js";
 import { extractResumeText, inferBasics } from "./services/importer.js";
@@ -132,6 +137,31 @@ app.post("/v1/ai/cover-letter", async (request, reply) => {
   }
 });
 
+const interviewPrepRequestSchema = matchSchema.extend({ applicationId: z.string().min(1).max(120) });
+
+app.post("/v1/ai/interview-prep", async (request, reply) => {
+  const input = interviewPrepRequestSchema.safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Invalid interview context", issues: input.error.issues });
+  const deterministic = buildInterviewPrep(input.data.applicationId, input.data.job, input.data.evidence);
+  if (!capabilities.ai) return deterministic;
+  try {
+    return await prepareInterviewWithDeepSeek(
+      input.data.applicationId,
+      input.data.resume,
+      input.data.job,
+      input.data.evidence,
+      {
+        questions: deterministic.questions,
+        themes: deterministic.themes,
+        questionsForInterviewer: deterministic.questionsForInterviewer,
+      },
+    ) ?? deterministic;
+  } catch (error) {
+    request.log.warn(error);
+    return { ...deterministic, warning: "DeepSeek was unavailable; deterministic interview preparation was used." };
+  }
+});
+
 const vaultSchema = z.object({ evidence: z.array(careerEvidenceSchema).max(500) });
 
 app.get("/v1/career-vault", async (request, reply) => {
@@ -177,6 +207,126 @@ app.post("/v1/jobs", async (request, reply) => {
   const { data, error } = await database.from("job_postings").upsert({ ...input.data, user_id: user.id }).select().single();
   if (error) return reply.code(500).send({ error: "Could not save job" });
   return { data };
+});
+
+const toApplicationRow = (application: z.infer<typeof applicationSchema>, userId: string) => ({
+  id: application.id,
+  user_id: userId,
+  job_id: application.jobId ?? null,
+  resume_id: application.resumeId ?? null,
+  cover_letter_id: application.coverLetterId ?? null,
+  role: application.role,
+  company: application.company,
+  location: application.location,
+  source_url: application.sourceUrl,
+  status: application.status,
+  match_score: application.matchScore,
+  cover_letter_snapshot: application.coverLetter ?? null,
+  job_snapshot: application.job ?? null,
+  notes: application.notes,
+  next_action: application.nextAction,
+  next_action_at: application.nextActionAt,
+  applied_at: application.appliedAt,
+  created_at: application.createdAt,
+  updated_at: application.updatedAt,
+});
+
+const fromApplicationRow = (row: Record<string, unknown>) => applicationSchema.parse({
+  id: row.id,
+  jobId: row.job_id ?? undefined,
+  resumeId: row.resume_id ?? undefined,
+  coverLetterId: row.cover_letter_id ?? undefined,
+  role: row.role,
+  company: row.company,
+  location: row.location,
+  sourceUrl: row.source_url,
+  status: row.status,
+  matchScore: row.match_score,
+  coverLetter: row.cover_letter_snapshot ?? undefined,
+  job: row.job_snapshot ?? undefined,
+  notes: row.notes,
+  nextAction: row.next_action,
+  nextActionAt: row.next_action_at,
+  appliedAt: row.applied_at,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+app.get("/v1/applications", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("applications").select("*").eq("user_id", user.id).order("updated_at", { ascending: false });
+  if (error) return reply.code(500).send({ error: "Could not load applications" });
+  return { data: (data ?? []).map((row) => fromApplicationRow(row as Record<string, unknown>)) };
+});
+
+app.put("/v1/applications/:id", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const input = applicationSchema.safeParse(request.body);
+  if (!input.success || input.data.id !== (request.params as { id: string }).id) return reply.code(400).send({ error: "Invalid application", issues: input.success ? [] : input.error.issues });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("applications").upsert(toApplicationRow(input.data, user.id)).select().single();
+  if (error) return reply.code(500).send({ error: "Could not save application" });
+  return { data: fromApplicationRow(data as Record<string, unknown>) };
+});
+
+app.delete("/v1/applications/:id", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { error } = await database.from("applications").delete().eq("id", (request.params as { id: string }).id).eq("user_id", user.id);
+  if (error) return reply.code(500).send({ error: "Could not delete application" });
+  return reply.code(204).send();
+});
+
+app.get("/v1/applications/:id/activities", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("application_activities").select("*").eq("application_id", (request.params as { id: string }).id).eq("user_id", user.id).order("created_at", { ascending: false });
+  if (error) return reply.code(500).send({ error: "Could not load activity" });
+  return { data: (data ?? []).map((row) => applicationActivitySchema.parse({ id: row.id, applicationId: row.application_id, kind: row.kind, message: row.message, metadata: row.metadata, createdAt: row.created_at })) };
+});
+
+app.post("/v1/applications/:id/activities", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const input = applicationActivitySchema.safeParse(request.body);
+  if (!input.success || input.data.applicationId !== (request.params as { id: string }).id) return reply.code(400).send({ error: "Invalid activity" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("application_activities").insert({ id: input.data.id, application_id: input.data.applicationId, user_id: user.id, kind: input.data.kind, message: input.data.message, metadata: input.data.metadata, created_at: input.data.createdAt }).select().single();
+  if (error) return reply.code(500).send({ error: "Could not save activity" });
+  return { data: applicationActivitySchema.parse({ id: data.id, applicationId: data.application_id, kind: data.kind, message: data.message, metadata: data.metadata, createdAt: data.created_at }) };
+});
+
+app.get("/v1/applications/:id/interview-pack", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("interview_packs").select("pack, updated_at").eq("application_id", (request.params as { id: string }).id).eq("user_id", user.id).maybeSingle();
+  if (error) return reply.code(500).send({ error: "Could not load interview pack" });
+  return { data: data?.pack ? interviewPackSchema.parse(data.pack) : null, updatedAt: data?.updated_at ?? null };
+});
+
+app.put("/v1/applications/:id/interview-pack", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const input = interviewPackSchema.safeParse(request.body);
+  if (!input.success || input.data.applicationId !== (request.params as { id: string }).id) return reply.code(400).send({ error: "Invalid interview pack" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const updatedAt = new Date().toISOString();
+  const { error } = await database.from("interview_packs").upsert({ id: `interview-${input.data.applicationId}`, application_id: input.data.applicationId, user_id: user.id, pack: input.data, updated_at: updatedAt }, { onConflict: "application_id" });
+  if (error) return reply.code(500).send({ error: "Could not save interview pack" });
+  return { data: input.data, updatedAt };
 });
 
 const uploadSchema = z.object({

@@ -6,7 +6,7 @@ import { analyzeResume, demoResume } from "@resumora/domain";
 import {
   ArrowLeft, Check, ChevronDown, CircleUserRound, Clock3, Download, FileText,
   GraduationCap, History, LayoutTemplate, LoaderCircle, PanelRightClose,
-  PanelRightOpen, Plus, Printer, Save, ScanSearch, Sparkles, Upload, WandSparkles,
+  LayoutDashboard, PanelRightOpen, Plus, Printer, Save, ScanSearch, Sparkles, Upload, WandSparkles,
   Target, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -164,6 +164,7 @@ export function BuilderStudio() {
         </div>
         <div className="top-actions">
           <Link className="button button-quiet studio-button" href="/workspace"><Target size={16} /> Job match</Link>
+          <Link className="icon-button" href="/applications" title="Application pipeline"><LayoutDashboard size={18} /></Link>
           <button className="icon-button" onClick={() => setVersionsOpen((value) => !value)} title="Version history"><History size={18} /></button>
           <button className="button button-quiet studio-button" onClick={() => fileRef.current?.click()} disabled={importing}>
             {importing ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />} Import

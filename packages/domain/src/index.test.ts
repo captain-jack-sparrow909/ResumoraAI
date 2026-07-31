@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeResume, demoCareerEvidence, demoResume, parseJobDescription, scoreJobMatch } from "./index";
+import { analyzeResume, buildInterviewPrep, demoApplications, demoCareerEvidence, demoResume, parseJobDescription, scoreJobMatch } from "./index";
 
 describe("analyzeResume", () => {
   it("returns explainable component scores", () => {
@@ -43,5 +43,13 @@ describe("Phase 2 job intelligence", () => {
     expect(report.matchedRequired).toContain("Figma");
     expect(report.evidenceIds.length).toBeGreaterThan(0);
     expect(report.analyzedAt).toBeTruthy();
+  });
+
+  it("builds evidence-linked interview preparation", () => {
+    const application = demoApplications.find((item) => item.job);
+    const pack = buildInterviewPrep(application!.id, application!.job!, demoCareerEvidence);
+    expect(pack.questions).toHaveLength(6);
+    expect(pack.questions.some((question) => question.evidenceIds.length > 0)).toBe(true);
+    expect(pack.questionsForInterviewer.length).toBeGreaterThan(2);
   });
 });

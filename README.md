@@ -1,6 +1,6 @@
 # Resumora AI
 
-Resumora is a truth-preserving resume and CV workspace. Phase 2 combines the structured editor and ATS-safe export foundation with job intelligence, an evidence-backed Career Vault, explainable job-match signals, targeted resume variants, a Claim Ledger, and guarded DeepSeek tailoring and cover letters.
+Resumora is a truth-preserving resume, CV, and application workspace. Phase 3 connects the structured editor and evidence-backed tailoring engine to an application pipeline, per-opportunity assets, decision history, follow-up planning, and interview preparation grounded in verified career evidence.
 
 ## Architecture
 
@@ -36,6 +36,7 @@ Without credentials, the editor and deterministic job-match engine work in local
 2. Run the migrations in order:
    - [`supabase/migrations/202607310001_phase_one.sql`](./supabase/migrations/202607310001_phase_one.sql)
    - [`supabase/migrations/202607310002_phase_two.sql`](./supabase/migrations/202607310002_phase_two.sql)
+   - [`supabase/migrations/202608010001_phase_three.sql`](./supabase/migrations/202608010001_phase_three.sql)
 3. Enable Email OTP authentication and add local/Vercel redirect URLs.
 4. Set the public Supabase URL and publishable key in Vercel.
 5. Set the URL, publishable key, and secret key in Render.
@@ -91,7 +92,7 @@ npm run build
 - Private R2 storage boundary
 - Truth-preserving DeepSeek rewriting boundary
 
-### Phase 2 — Best-in-class AI tailoring (current)
+### Phase 2 — Best-in-class AI tailoring
 
 - Career Vault with reusable evidence, achievements, skills, and metrics
 - Base resume → role-specific resume variants with source lineage
@@ -104,16 +105,18 @@ npm run build
 
 Still scheduled for the next Phase 2 increment: export round-trip parsing that compares PDF/DOCX extraction against the source document, proposal/audit persistence in the UI, and richer semantic/recency scoring.
 
-### Phase 3 — Complete job-search workspace
+### Phase 3 — Complete job-search workspace (current)
 
-- Saved jobs and an application kanban tracker
-- Tailored resume, cover letter, notes, and status stored per application
-- Browser extension for capturing job descriptions
-- Recruiter/mentor collaboration, comments, and approval history
-- Interview preparation based on the resume, job, and verified STAR stories
-- LinkedIn/profile consistency checks
-- Multilingual documents, regional conventions, and RTL templates
-- Mobile-first review and quick edits
+- Saved jobs and a seven-state application pipeline
+- Tailored resume, cover letter, job snapshot, notes, follow-up, and match score stored per opportunity
+- Job workspace → tracked application handoff with targeted-resume lineage
+- Immutable activity records for status, review, asset, and interview events
+- DeepSeek interview preparation based on the resume, job, and verified Career Vault evidence
+- Deterministic interview fallback, likely themes, answer structures, and questions for the interviewer
+- Authenticated Supabase sync with local-first guest operation
+- Mobile application board, detail workspace, and quick status/plan edits
+
+Still scheduled for the next Phase 3 increment: browser-extension capture, external recruiter/mentor invitations and approvals, LinkedIn/profile consistency checks, and multilingual/RTL document variants.
 
 ### Phase 4 — Career intelligence moat
 
