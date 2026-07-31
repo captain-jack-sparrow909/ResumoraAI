@@ -1,0 +1,24 @@
+{
+  "name": "resumora-ai",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,magenta \"npm run dev -w @resumora/web\" \"npm run dev -w @resumora/api\"",
+    "build": "npm run build -w @resumora/domain && npm run build -w @resumora/api && npm run build -w @resumora/web",
+    "test": "npm run test -w @resumora/domain",
+    "typecheck": "npm run typecheck -w @resumora/domain && npm run build -w @resumora/domain && npm run typecheck -w @resumora/api && npm run typecheck -w @resumora/web",
+    "lint": "npm run lint -w @resumora/web",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "prettier": "^3.6.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
