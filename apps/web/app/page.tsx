@@ -31,6 +31,7 @@ export default function Home() {
         <div className="nav-links" aria-label="Main navigation">
           <a href="#method">How it works</a>
           <a href="#standards">Our standard</a>
+          <Link href="/workspace">Job workspace</Link>
         </div>
         <Link className="button button-quiet" href="/login">Sign in</Link>
       </nav>
@@ -44,8 +45,9 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" href="/builder">Build my resume <ArrowRight size={17} /></Link>
-            <span className="micro-proof"><Check size={15} /> No card required</span>
+            <Link className="hero-text-link" href="/workspace">Tailor an existing resume <ArrowRight size={14} /></Link>
           </div>
+          <span className="micro-proof hero-proof"><Check size={15} /> No card required · Your original resume stays untouched</span>
           <div className="trust-row">
             <div><strong>3-part</strong><span>explainable score</span></div>
             <div><strong>5</strong><span>ATS-safe templates</span></div>

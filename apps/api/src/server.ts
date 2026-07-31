@@ -1,10 +1,22 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { analyzeResume, resumeSchema } from "@resumora/domain";
+import {
+  analyzeResume,
+  careerEvidenceSchema,
+  jobAnalysisSchema,
+  parseJobDescription,
+  resumeSchema,
+  scoreJobMatch,
+} from "@resumora/domain";
 import { z } from "zod";
 import { capabilities, config } from "./config.js";
-import { rewriteWithDeepSeek } from "./services/deepseek.js";
+import {
+  analyzeJobWithDeepSeek,
+  rewriteWithDeepSeek,
+  tailorResumeWithDeepSeek,
+  writeCoverLetterWithDeepSeek,
+} from "./services/deepseek.js";
 import { extractResumeText, inferBasics } from "./services/importer.js";
 import { createUploadUrl } from "./services/r2.js";
 import { getRequestUser, getSupabaseAdmin } from "./services/supabase.js";
@@ -63,6 +75,108 @@ app.post("/v1/ai/rewrite", async (request, reply) => {
     request.log.error(error);
     return reply.code(502).send({ error: "AI rewrite failed. Your original content is unchanged." });
   }
+});
+
+const jobDescriptionSchema = z.object({
+  description: z.string().min(120).max(50_000),
+  useAI: z.boolean().default(true),
+});
+
+app.post("/v1/jobs/analyze", async (request, reply) => {
+  const input = jobDescriptionSchema.safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Paste a complete job description", issues: input.error.issues });
+  const deterministic = parseJobDescription(input.data.description);
+  if (!input.data.useAI || !capabilities.ai) return { analysis: deterministic, source: "deterministic" };
+  try {
+    const result = await analyzeJobWithDeepSeek(input.data.description, deterministic);
+    return result ? { ...result, source: "deepseek" } : { analysis: deterministic, source: "deterministic" };
+  } catch (error) {
+    request.log.warn(error);
+    return { analysis: deterministic, source: "deterministic", warning: "AI extraction was unavailable; deterministic analysis was used." };
+  }
+});
+
+const matchSchema = z.object({
+  resume: resumeSchema,
+  job: jobAnalysisSchema,
+  evidence: z.array(careerEvidenceSchema).max(500),
+});
+
+app.post("/v1/tailor/match", async (request, reply) => {
+  const input = matchSchema.safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Invalid tailoring context", issues: input.error.issues });
+  return scoreJobMatch(input.data.resume, input.data.job, input.data.evidence);
+});
+
+app.post("/v1/ai/tailor", async (request, reply) => {
+  const input = matchSchema.safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Invalid tailoring context", issues: input.error.issues });
+  if (!capabilities.ai) return reply.code(503).send({ error: "AI is not configured", code: "AI_NOT_CONFIGURED" });
+  try {
+    return await tailorResumeWithDeepSeek(input.data.resume, input.data.job, input.data.evidence);
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(502).send({ error: "Tailoring failed. Your resume is unchanged." });
+  }
+});
+
+app.post("/v1/ai/cover-letter", async (request, reply) => {
+  const input = matchSchema.safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Invalid cover letter context", issues: input.error.issues });
+  if (!capabilities.ai) return reply.code(503).send({ error: "AI is not configured", code: "AI_NOT_CONFIGURED" });
+  try {
+    return await writeCoverLetterWithDeepSeek(input.data.resume, input.data.job, input.data.evidence);
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(502).send({ error: "Cover letter generation failed." });
+  }
+});
+
+const vaultSchema = z.object({ evidence: z.array(careerEvidenceSchema).max(500) });
+
+app.get("/v1/career-vault", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("career_profiles").select("profile, updated_at").eq("user_id", user.id).maybeSingle();
+  if (error) return reply.code(500).send({ error: "Could not load Career Vault" });
+  return { evidence: data?.profile?.evidence ?? [], updatedAt: data?.updated_at ?? null };
+});
+
+app.put("/v1/career-vault", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const input = vaultSchema.safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Invalid Career Vault", issues: input.error.issues });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const updatedAt = new Date().toISOString();
+  const { error } = await database.from("career_profiles").upsert({ user_id: user.id, profile: input.data, updated_at: updatedAt }, { onConflict: "user_id" });
+  if (error) return reply.code(500).send({ error: "Could not save Career Vault" });
+  return { evidence: input.data.evidence, updatedAt };
+});
+
+app.get("/v1/jobs", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("job_postings").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+  if (error) return reply.code(500).send({ error: "Could not load saved jobs" });
+  return { data };
+});
+
+app.post("/v1/jobs", async (request, reply) => {
+  const user = await getRequestUser(request);
+  if (!user) return reply.code(401).send({ error: "Authentication required" });
+  const input = z.object({ id: z.string(), title: z.string(), company: z.string(), description: z.string(), analysis: jobAnalysisSchema }).safeParse(request.body);
+  if (!input.success) return reply.code(400).send({ error: "Invalid job" });
+  const database = getSupabaseAdmin();
+  if (!database) return reply.code(503).send({ error: "Database is not configured" });
+  const { data, error } = await database.from("job_postings").upsert({ ...input.data, user_id: user.id }).select().single();
+  if (error) return reply.code(500).send({ error: "Could not save job" });
+  return { data };
 });
 
 const uploadSchema = z.object({

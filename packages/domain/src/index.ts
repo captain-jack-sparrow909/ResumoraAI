@@ -48,6 +48,9 @@ export const resumeSchema = z.object({
   experience: z.array(experienceSchema),
   education: z.array(educationSchema),
   skills: z.array(skillGroupSchema),
+  sourceResumeId: z.string().optional(),
+  targetJobId: z.string().optional(),
+  variantType: z.enum(["base", "targeted"]).default("base"),
   updatedAt: z.string(),
 });
 
@@ -55,6 +58,81 @@ export type ResumeDocument = z.infer<typeof resumeSchema>;
 export type Experience = z.infer<typeof experienceSchema>;
 export type Education = z.infer<typeof educationSchema>;
 export type SkillGroup = z.infer<typeof skillGroupSchema>;
+
+export const careerEvidenceSchema = z.object({
+  id: z.string(),
+  type: z.enum(["achievement", "responsibility", "project", "skill", "certification", "education"]),
+  title: z.string(),
+  organization: z.string().default(""),
+  description: z.string(),
+  skills: z.array(z.string()).default([]),
+  metrics: z.array(z.string()).default([]),
+  date: z.string().default(""),
+  verified: z.boolean().default(true),
+  source: z.enum(["user", "resume_import", "ai_extracted"]).default("user"),
+});
+
+export const jobAnalysisSchema = z.object({
+  role: z.string(),
+  company: z.string().default(""),
+  seniority: z.enum(["internship", "junior", "mid", "senior", "lead", "executive", "unknown"]),
+  summary: z.string(),
+  requiredSkills: z.array(z.string()),
+  preferredSkills: z.array(z.string()),
+  responsibilities: z.array(z.string()),
+  qualifications: z.array(z.string()),
+  keywords: z.array(z.string()),
+});
+
+export const jobPostingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  company: z.string().default(""),
+  description: z.string(),
+  analysis: jobAnalysisSchema,
+  createdAt: z.string(),
+});
+
+export type CareerEvidence = z.infer<typeof careerEvidenceSchema>;
+export type JobAnalysis = z.infer<typeof jobAnalysisSchema>;
+export type JobPosting = z.infer<typeof jobPostingSchema>;
+
+export type MatchGap = {
+  term: string;
+  kind: "required" | "preferred";
+  severity: "critical" | "improve";
+  guidance: string;
+};
+
+export type JobMatchReport = {
+  overall: number;
+  hardSkills: number;
+  keywordCoverage: number;
+  evidenceStrength: number;
+  experienceAlignment: number;
+  matchedRequired: string[];
+  missingRequired: string[];
+  matchedPreferred: string[];
+  missingPreferred: string[];
+  evidenceIds: string[];
+  gaps: MatchGap[];
+  analyzedAt: string;
+};
+
+export const tailoringProposalSchema = z.object({
+  id: z.string(),
+  target: z.enum(["headline", "summary", "experience_bullet"]),
+  experienceId: z.string().optional(),
+  bulletIndex: z.number().int().nonnegative().optional(),
+  original: z.string(),
+  suggestion: z.string(),
+  rationale: z.string(),
+  evidenceIds: z.array(z.string()),
+  addedKeywords: z.array(z.string()),
+  unsupportedClaims: z.array(z.string()),
+});
+
+export type TailoringProposal = z.infer<typeof tailoringProposalSchema>;
 
 export type AnalysisFinding = {
   id: string;
@@ -229,5 +307,175 @@ export const demoResume: ResumeDocument = {
     { id: "skill-1", name: "Product", items: ["Product strategy", "User research", "Interaction design", "Prototyping", "Design systems"] },
     { id: "skill-2", name: "Tools", items: ["Figma", "FigJam", "Maze", "Amplitude", "Jira"] },
   ],
+  variantType: "base",
   updatedAt: new Date().toISOString(),
 };
+
+const knownSkills = [
+  "A/B testing", "Agile", "Amplitude", "analytics", "AWS", "Azure", "business strategy",
+  "change management", "communication", "customer research", "data analysis", "design systems",
+  "Docker", "Figma", "financial modeling", "Git", "Google Analytics", "GraphQL", "Java",
+  "JavaScript", "Jira", "Kubernetes", "leadership", "machine learning", "market research",
+  "Next.js", "Node.js", "operations", "PostgreSQL", "product design", "product management",
+  "product strategy", "project management", "prototyping", "Python", "React", "roadmapping",
+  "sales", "Scrum", "SQL", "stakeholder management", "strategy", "Supabase", "Tableau",
+  "team management", "TypeScript", "user research", "UX design", "visual design",
+];
+
+const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
+const unique = (items: string[]) => [...new Map(items.filter(Boolean).map((item) => [normalize(item), item.trim()])).values()];
+
+export function parseJobDescription(description: string): JobAnalysis {
+  const rawLines = description.split(/\r?\n/).map((line) => line.replace(/^[\s•*\-–—]+/, "").trim()).filter(Boolean);
+  const lower = description.toLowerCase();
+  const roleLine = rawLines.find((line) => /(?:designer|engineer|manager|director|developer|analyst|consultant|specialist|lead|officer|architect|recruiter|marketer)/i.test(line) && line.length < 110);
+  const role = roleLine?.replace(/^(job title|position|role)\s*[:\-]\s*/i, "") ?? rawLines[0]?.slice(0, 100) ?? "Target role";
+  const seniority: JobAnalysis["seniority"] = /\b(chief|vp|vice president|executive|head of)\b/i.test(role)
+    ? "executive"
+    : /\b(principal|staff|lead)\b/i.test(role)
+      ? "lead"
+      : /\b(senior|sr\.)\b/i.test(role)
+        ? "senior"
+        : /\b(junior|jr\.|entry.level|graduate)\b/i.test(role)
+          ? "junior"
+          : /\b(intern|internship)\b/i.test(role)
+            ? "internship"
+            : "mid";
+
+  const foundSkills = knownSkills.filter((skill) => lower.includes(skill.toLowerCase()));
+  const categorized = rawLines.reduce<{ section: "required" | "preferred" | "responsibilities" | null; required: string[]; preferred: string[] }>((state, line) => {
+    const requiredHeading = /^(required(?: qualifications?| skills?)?|requirements?|minimum qualifications?|what you bring)\s*:?(.*)$/i.exec(line);
+    const preferredHeading = /^(preferred(?: qualifications?| skills?)?|nice to have|bonus(?: points)?|ideally)\s*:?(.*)$/i.exec(line);
+    const responsibilityHeading = /^(responsibilities|what you(?:'|’)ll do|what you will do|the role)\s*:?(.*)$/i.exec(line);
+    if (requiredHeading) {
+      state.section = "required";
+      if (requiredHeading[2]?.trim()) state.required.push(requiredHeading[2].trim());
+      return state;
+    }
+    if (preferredHeading) {
+      state.section = "preferred";
+      if (preferredHeading[2]?.trim()) state.preferred.push(preferredHeading[2].trim());
+      return state;
+    }
+    if (responsibilityHeading) {
+      state.section = "responsibilities";
+      return state;
+    }
+    if (state.section === "required") state.required.push(line);
+    if (state.section === "preferred") state.preferred.push(line);
+    return state;
+  }, { section: null, required: [], preferred: [] });
+  const explicitlyRequired = rawLines.filter((line) => /\b(must|required|minimum|you have)\b/i.test(line));
+  const explicitlyPreferred = rawLines.filter((line) => /\b(preferred|ideally|nice to have|bonus|plus)\b/i.test(line));
+  const requiredLines = unique([...categorized.required, ...explicitlyRequired]);
+  const preferredLines = unique([...categorized.preferred, ...explicitlyPreferred]);
+  const requiredSkills = foundSkills.filter((skill) => requiredLines.some((line) => line.toLowerCase().includes(skill.toLowerCase())));
+  const preferredSkills = foundSkills.filter((skill) => preferredLines.some((line) => line.toLowerCase().includes(skill.toLowerCase())));
+  const uncategorized = foundSkills.filter((skill) => !requiredSkills.includes(skill) && !preferredSkills.includes(skill));
+  const responsibilities = rawLines
+    .filter((line) => /^(lead|build|create|design|develop|drive|manage|own|partner|collaborate|deliver|define|conduct|support|work|translate|establish|improve)\b/i.test(line))
+    .slice(0, 8);
+  const qualifications = unique([...requiredLines, ...preferredLines]).slice(0, 8);
+  const titleKeywords = role.split(/\s+/).filter((word) => word.length > 3 && !/^(senior|junior|lead|the|and|for)$/i.test(word));
+
+  return {
+    role,
+    company: "",
+    seniority,
+    summary: responsibilities.slice(0, 2).join(" ") || rawLines.slice(1, 3).join(" ").slice(0, 360),
+    requiredSkills: unique(requiredSkills.length ? requiredSkills : uncategorized.slice(0, 8)),
+    preferredSkills: unique(preferredSkills),
+    responsibilities,
+    qualifications,
+    keywords: unique([...foundSkills, ...titleKeywords]).slice(0, 20),
+  };
+}
+
+const includesTerm = (haystack: string, term: string) => normalize(haystack).includes(normalize(term));
+
+export function scoreJobMatch(resume: ResumeDocument, job: JobAnalysis, evidence: CareerEvidence[]): JobMatchReport {
+  const resumeText = [
+    resume.basics.headline,
+    resume.summary,
+    ...resume.skills.flatMap((group) => group.items),
+    ...resume.experience.flatMap((item) => [item.role, item.company, ...item.bullets]),
+  ].join(" ");
+  const evidenceText = evidence.map((item) => [item.title, item.description, ...item.skills, ...item.metrics].join(" "));
+  const combinedText = `${resumeText} ${evidenceText.join(" ")}`;
+
+  const matchedRequired = job.requiredSkills.filter((skill) => includesTerm(combinedText, skill));
+  const missingRequired = job.requiredSkills.filter((skill) => !matchedRequired.includes(skill));
+  const matchedPreferred = job.preferredSkills.filter((skill) => includesTerm(combinedText, skill));
+  const missingPreferred = job.preferredSkills.filter((skill) => !matchedPreferred.includes(skill));
+  const matchedKeywords = job.keywords.filter((keyword) => includesTerm(combinedText, keyword));
+  const supportingEvidence = evidence.filter((item) =>
+    [...matchedRequired, ...matchedPreferred].some((skill) => includesTerm(`${item.title} ${item.description} ${item.skills.join(" ")}`, skill)),
+  );
+
+  const hardSkills = job.requiredSkills.length ? Math.round((matchedRequired.length / job.requiredSkills.length) * 100) : 80;
+  const keywordCoverage = job.keywords.length ? Math.round((matchedKeywords.length / job.keywords.length) * 100) : 80;
+  const targetTokens = normalize(job.role).split(" ").filter((word) => word.length > 3);
+  const titleHits = targetTokens.filter((token) => includesTerm(resume.basics.headline, token)).length;
+  const experienceAlignment = targetTokens.length ? Math.min(100, Math.round((titleHits / targetTokens.length) * 65 + hardSkills * 0.35)) : hardSkills;
+  const evidenceStrength = matchedRequired.length
+    ? Math.min(100, Math.round((supportingEvidence.length / matchedRequired.length) * 85 + supportingEvidence.filter((item) => item.metrics.length).length * 8))
+    : evidence.length ? 75 : 25;
+  const overall = Math.round(hardSkills * 0.4 + keywordCoverage * 0.2 + evidenceStrength * 0.25 + experienceAlignment * 0.15);
+
+  return {
+    overall,
+    hardSkills,
+    keywordCoverage,
+    evidenceStrength,
+    experienceAlignment,
+    matchedRequired,
+    missingRequired,
+    matchedPreferred,
+    missingPreferred,
+    evidenceIds: supportingEvidence.map((item) => item.id),
+    gaps: [
+      ...missingRequired.map((term): MatchGap => ({ term, kind: "required", severity: "critical", guidance: `Add ${term} only if your Career Vault contains defensible evidence for it.` })),
+      ...missingPreferred.map((term): MatchGap => ({ term, kind: "preferred", severity: "improve", guidance: `Consider surfacing verified ${term} experience if it is relevant.` })),
+    ],
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
+export const demoCareerEvidence: CareerEvidence[] = [
+  {
+    id: "evidence-onboarding",
+    type: "achievement",
+    title: "Enterprise onboarding redesign",
+    organization: "Northstar Labs",
+    description: "Led research and interaction design for a redesigned enterprise onboarding journey across fourteen customer segments.",
+    skills: ["User research", "Product strategy", "Interaction design"],
+    metrics: ["38% reduction in time-to-value", "14 customer segments"],
+    date: "2024",
+    verified: true,
+    source: "user",
+  },
+  {
+    id: "evidence-system",
+    type: "project",
+    title: "Modular design system",
+    organization: "Northstar Labs",
+    description: "Designed and launched a shared design system with reusable components and accessibility guidance.",
+    skills: ["Design systems", "Figma", "Accessibility", "Stakeholder management"],
+    metrics: ["24% faster feature delivery", "6 product squads"],
+    date: "2023",
+    verified: true,
+    source: "user",
+  },
+  {
+    id: "evidence-checkout",
+    type: "achievement",
+    title: "Checkout conversion program",
+    organization: "Arc Commerce",
+    description: "Used mixed-method customer research, analytics, and iterative prototyping to improve checkout completion across web and mobile.",
+    skills: ["Customer research", "Prototyping", "Analytics", "A/B testing"],
+    metrics: ["17% increase in checkout completion", "3 regional markets"],
+    date: "2021",
+    verified: true,
+    source: "resume_import",
+  },
+];

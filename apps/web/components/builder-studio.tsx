@@ -7,7 +7,7 @@ import {
   ArrowLeft, Check, ChevronDown, CircleUserRound, Clock3, Download, FileText,
   GraduationCap, History, LayoutTemplate, LoaderCircle, PanelRightClose,
   PanelRightOpen, Plus, Printer, Save, ScanSearch, Sparkles, Upload, WandSparkles,
-  X,
+  Target, X,
 } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
@@ -18,6 +18,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 type SectionId = "basics" | "summary" | "experience" | "education" | "skills" | "design";
 type SavedVersion = { id: string; label: string; createdAt: string; resume: ResumeDocument };
+type TargetedContext = { job?: { role?: string; company?: string }; report?: { overall?: number } };
 
 const sectionNav: Array<{ id: SectionId; label: string; icon: typeof CircleUserRound }> = [
   { id: "basics", label: "Personal details", icon: CircleUserRound },
@@ -47,6 +48,7 @@ export function BuilderStudio() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiProposal, setAiProposal] = useState<{ suggestion: string; rationale: string; model: string } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [targetedContext, setTargetedContext] = useState<TargetedContext | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const analysis: ResumeAnalysis = useMemo(() => analyzeResume(resume), [resume]);
 
@@ -54,11 +56,15 @@ export function BuilderStudio() {
     const timeout = window.setTimeout(() => {
       const stored = localStorage.getItem("resumora:resume");
       const storedVersions = localStorage.getItem("resumora:versions");
+      const storedTargetedContext = localStorage.getItem("resumora:targeted-context");
       if (stored) {
         try { setResume(JSON.parse(stored)); } catch { /* retain demo */ }
       }
       if (storedVersions) {
         try { setVersions(JSON.parse(storedVersions)); } catch { /* ignore invalid local data */ }
+      }
+      if (storedTargetedContext) {
+        try { setTargetedContext(JSON.parse(storedTargetedContext)); } catch { /* ignore invalid local data */ }
       }
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -150,9 +156,14 @@ export function BuilderStudio() {
         <div className="studio-brand"><Logo compact /><Link href="/"><ArrowLeft size={16} /> Back</Link></div>
         <div className="document-title">
           <input aria-label="Resume title" value={resume.title} onChange={(event) => update((current) => ({ ...current, title: event.target.value }))} />
-          <span><i />{status}</span>
+          <span>
+            {resume.variantType === "targeted" && targetedContext?.job?.role
+              ? <><Target size={9} /> Targeted for {targetedContext.job.role}{typeof targetedContext.report?.overall === "number" ? ` · ${targetedContext.report.overall}% match` : ""}</>
+              : <><i />{status}</>}
+          </span>
         </div>
         <div className="top-actions">
+          <Link className="button button-quiet studio-button" href="/workspace"><Target size={16} /> Job match</Link>
           <button className="icon-button" onClick={() => setVersionsOpen((value) => !value)} title="Version history"><History size={18} /></button>
           <button className="button button-quiet studio-button" onClick={() => fileRef.current?.click()} disabled={importing}>
             {importing ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />} Import

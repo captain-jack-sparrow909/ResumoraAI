@@ -1,6 +1,6 @@
 # Resumora AI
 
-Resumora is a truth-preserving resume and CV workspace. Phase 1 provides a structured resume editor, five ATS-safe templates, explainable readiness checks, PDF/DOCX export, PDF/DOCX import, version snapshots, optional Supabase sync, and a guarded DeepSeek rewriting endpoint.
+Resumora is a truth-preserving resume and CV workspace. Phase 2 combines the structured editor and ATS-safe export foundation with job intelligence, an evidence-backed Career Vault, explainable job-match signals, targeted resume variants, a Claim Ledger, and guarded DeepSeek tailoring and cover letters.
 
 ## Architecture
 
@@ -28,12 +28,14 @@ npm run dev
 - Frontend: `http://localhost:3000`
 - Backend health: `http://localhost:4000/health`
 
-Without credentials, the studio works in local mode with browser autosave, version snapshots, live scoring, template switching, and exports. Configure the services below to enable cloud sync, imports, private storage, authentication, and AI.
+Without credentials, the editor and deterministic job-match engine work in local mode with browser autosave, Career Vault storage, version snapshots, live scoring, template switching, and exports. Configure the services below to enable cloud sync, imports, private storage, authentication, and DeepSeek proposals.
 
 ## Configure Supabase
 
 1. Create a Supabase project.
-2. Run [`supabase/migrations/202607310001_phase_one.sql`](./supabase/migrations/202607310001_phase_one.sql) in the SQL editor.
+2. Run the migrations in order:
+   - [`supabase/migrations/202607310001_phase_one.sql`](./supabase/migrations/202607310001_phase_one.sql)
+   - [`supabase/migrations/202607310002_phase_two.sql`](./supabase/migrations/202607310002_phase_two.sql)
 3. Enable Email OTP authentication and add local/Vercel redirect URLs.
 4. Set the public Supabase URL and publishable key in Vercel.
 5. Set the URL, publishable key, and secret key in Render.
@@ -50,7 +52,7 @@ Object keys are isolated under `users/{userId}/...`; generated upload URLs expir
 
 Add `DEEPSEEK_API_KEY` to Render. The default model is `deepseek-v4-pro`, DeepSeek's flagship API model as of July 31, 2026. It remains configurable through `DEEPSEEK_MODEL` for future model upgrades.
 
-AI calls are server-side and use structured JSON output. The system prompt prohibits invented skills, employers, qualifications, metrics, or outcomes. Suggestions appear as user-approved diffs and never overwrite original content automatically.
+AI calls are server-side and use structured JSON output. The system prompt prohibits invented skills, employers, qualifications, metrics, or outcomes. Job descriptions are treated as untrusted quoted data. Suggestions appear as user-approved diffs, cite Career Vault evidence IDs, and never overwrite original content automatically.
 
 ## Deploy
 
@@ -89,17 +91,18 @@ npm run build
 - Private R2 storage boundary
 - Truth-preserving DeepSeek rewriting boundary
 
-### Phase 2 — Best-in-class AI tailoring
+### Phase 2 — Best-in-class AI tailoring (current)
 
 - Career Vault with reusable evidence, achievements, skills, and metrics
-- Base resume → role-specific resume variants
-- Job-description parser separating required and preferred qualifications
-- Independent Machine Readability, Job Match, and Recruiter Quality scores
-- Keyword, semantic, seniority, recency, and evidence analysis
+- Base resume → role-specific resume variants with source lineage
+- DeepSeek job parser with a deterministic fallback and required/preferred separation
+- Independent Machine Readability, Job Match, Recruiter Quality, keyword, hard-skill, evidence, and experience signals
 - Claim Ledger linking every AI proposal to verified career evidence
-- Bullet, profile, title, and cover-letter assistance
-- Export round-trip parsing to compare PDF/DOCX extraction with source data
-- One-click fixes that always show an editable diff
+- Headline, profile, bullet, and cover-letter assistance with explicit review
+- Authenticated persistence contracts for Career Vault records and saved jobs
+- Local-first operation when Supabase or DeepSeek is unavailable
+
+Still scheduled for the next Phase 2 increment: export round-trip parsing that compares PDF/DOCX extraction against the source document, proposal/audit persistence in the UI, and richer semantic/recency scoring.
 
 ### Phase 3 — Complete job-search workspace
 

@@ -43,6 +43,20 @@ async function checkSupabase() {
     const admin = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { error } = await admin.from("resumes").select("id", { head: true, count: "exact" }).limit(1);
     record("Supabase DB", !error, error ? `schema check failed (${error.code ?? "database error"}); apply the Phase 1 migration` : "secret key accepted and resumes table is available");
+    const phaseTwoChecks = await Promise.all(
+      ["job_postings", "resume_variants", "ai_proposals", "cover_letters"].map(async (table) => ({
+        table,
+        result: await admin.from(table).select("id", { head: true, count: "exact" }).limit(1),
+      })),
+    );
+    const missingPhaseTwo = phaseTwoChecks.find(({ result }) => result.error);
+    record(
+      "Supabase Phase 2",
+      !missingPhaseTwo,
+      missingPhaseTwo
+        ? `table ${missingPhaseTwo.table} failed (${missingPhaseTwo.result.error?.code ?? "database error"}); apply the Phase 2 migration`
+        : "all four job intelligence tables are available",
+    );
   } catch {
     record("Supabase DB", false, "could not query the project database");
   }
