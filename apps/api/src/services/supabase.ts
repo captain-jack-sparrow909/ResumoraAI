@@ -34,12 +34,43 @@ export async function runDatabaseMaintenance(retentionDays: number) {
   const database = getSupabaseAdmin();
   if (!database) throw new Error("Database is not configured");
 
-  const { data, error } = await database.rpc("run_service_maintenance", { retention_window_days: retentionDays });
-  if (error) throw new Error(`Database maintenance failed: ${error.message}`);
-  return data as {
-    livenessAction: "inserted" | "deleted";
-    cleanupRan: boolean;
-    deleted: Record<string, number>;
-    cutoff: string;
-  };
+  const { data: liveness, error: livenessReadError } = await database.from("service_liveness").select("singleton").eq("singleton", true).maybeSingle();
+  if (livenessReadError) throw new Error(`Database liveness read failed: ${livenessReadError.message}`);
+
+  const livenessAction = liveness ? "deleted" : "inserted";
+  const livenessWrite = liveness
+    ? await database.from("service_liveness").delete().eq("singleton", true)
+    : await database.from("service_liveness").insert({ singleton: true, touched_at: new Date().toISOString() });
+  if (livenessWrite.error) throw new Error(`Database liveness ${livenessAction} failed: ${livenessWrite.error.message}`);
+
+  const { data: state, error: stateReadError } = await database.from("service_maintenance_state").select("last_cleanup_at").eq("singleton", true).maybeSingle();
+  if (stateReadError) throw new Error(`Database maintenance state read failed: ${stateReadError.message}`);
+
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1_000).toISOString();
+  const cleanupRan = !state?.last_cleanup_at || new Date(state.last_cleanup_at).getTime() <= now.getTime() - 24 * 60 * 60 * 1_000;
+  const deleted: Record<string, number> = {};
+
+  if (cleanupRan) {
+    const cleanupTargets = [
+      { table: "resume_versions", key: "resumeVersions" },
+      { table: "ai_proposals", key: "aiProposals" },
+      { table: "career_coaching_sessions", key: "careerCoachingSessions" },
+      { table: "application_review_invites", key: "applicationReviewInvites" },
+      { table: "organization_invites", key: "organizationInvites" },
+    ] as const;
+
+    for (const target of cleanupTargets) {
+      const { data, error } = await database.from(target.table).delete().lt("created_at", cutoff).select("id");
+      if (error) throw new Error(`Database cleanup failed for ${target.table}: ${error.message}`);
+      deleted[target.key] = data?.length ?? 0;
+    }
+
+    const { error: stateWriteError } = await database
+      .from("service_maintenance_state")
+      .upsert({ singleton: true, last_cleanup_at: now.toISOString() }, { onConflict: "singleton" });
+    if (stateWriteError) throw new Error(`Database maintenance state write failed: ${stateWriteError.message}`);
+  }
+
+  return { livenessAction, cleanupRan, deleted, cutoff };
 }

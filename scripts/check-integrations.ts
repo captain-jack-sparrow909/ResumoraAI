@@ -133,7 +133,7 @@ async function checkSupabase() {
     const maintenanceChecks = await Promise.all(
       ["service_liveness", "service_maintenance_state"].map(async (table) => ({
         table,
-        result: await admin.from(table).select("singleton", { head: true, count: "exact" }).limit(1),
+        result: await admin.from(table).select("singleton").limit(1),
       })),
     );
     const missingMaintenance = maintenanceChecks.find(({ result }) => result.error);

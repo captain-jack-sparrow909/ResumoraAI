@@ -41,6 +41,7 @@ Without credentials, the editor and deterministic job-match engine work in local
    - [`supabase/migrations/202608010003_phase_four_career_intelligence.sql`](./supabase/migrations/202608010003_phase_four_career_intelligence.sql)
    - [`supabase/migrations/202608010004_phase_four_publishing_organizations.sql`](./supabase/migrations/202608010004_phase_four_publishing_organizations.sql)
    - [`supabase/migrations/202608010005_free_tier_maintenance.sql`](./supabase/migrations/202608010005_free_tier_maintenance.sql)
+   - [`supabase/migrations/202608010006_direct_maintenance_tables.sql`](./supabase/migrations/202608010006_direct_maintenance_tables.sql)
 3. Enable Email OTP authentication and add local/Vercel redirect URLs.
 4. Set the public Supabase URL and publishable key in Vercel.
 5. Set the URL, publishable key, and secret key in Render.
@@ -75,7 +76,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 
 The repository includes [`render.yaml`](./render.yaml) configured for Render's Free plan. Create a Blueprint from the repository, set all secrets, and set `WEB_ORIGIN` to the exact Vercel origin. Generate a strong `CRON_SECRET` (at least 32 random bytes) and add it only to Render and the cron provider. The API binds to Render's `PORT` on `0.0.0.0` and exposes `/health`. Resumora uses Supabase's current publishable/secret key pair, while retaining legacy anon/service-role aliases in code for backwards compatibility.
 
-The protected `GET /internal/cron/keepalive` endpoint performs one tiny Supabase liveness toggle on every call. At most once every 24 hours it also runs the 60-day retention pass, avoiding unnecessary R2 listing operations. It deletes only disposable database history and raw R2 imports; primary resumes, applications, portfolios, outcomes, and organization records remain intact. Configure the cron request with `Authorization: Bearer <CRON_SECRET>` and never put the secret in a URL. `RETENTION_DAYS` defaults to `60` and is constrained to 30–365 days.
+The protected `GET /internal/cron/keepalive` endpoint performs one tiny Supabase liveness toggle directly through the server-only secret client on every call. At most once every 24 hours it also runs the 60-day retention pass, avoiding unnecessary R2 listing operations. It deletes only disposable database history and raw R2 imports; primary resumes, applications, portfolios, outcomes, and organization records remain intact. Configure the cron request with `Authorization: Bearer <CRON_SECRET>` and never put the secret in a URL. `RETENTION_DAYS` defaults to `60` and is constrained to 30–365 days.
 
 ## Verification
 
