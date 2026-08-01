@@ -130,6 +130,20 @@ async function checkSupabase() {
         ? `table ${missingPublishing.table} failed (${missingPublishing.result.error?.code ?? "database error"}); apply the Phase 4 publishing migration`
         : "portfolio publishing, memberships, consent grants, and cohort tables are available",
     );
+    const maintenanceChecks = await Promise.all(
+      ["service_liveness", "service_maintenance_state"].map(async (table) => ({
+        table,
+        result: await admin.from(table).select("singleton", { head: true, count: "exact" }).limit(1),
+      })),
+    );
+    const missingMaintenance = maintenanceChecks.find(({ result }) => result.error);
+    record(
+      "Supabase upkeep",
+      !missingMaintenance,
+      missingMaintenance
+        ? `table ${missingMaintenance.table} failed (${missingMaintenance.result.error?.code ?? "database error"}); apply the free-tier maintenance migration`
+        : "private liveness toggle and retention schema are available",
+    );
   } catch {
     record("Supabase DB", false, "could not query the project database");
   }

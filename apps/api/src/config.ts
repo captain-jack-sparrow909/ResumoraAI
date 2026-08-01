@@ -7,8 +7,15 @@ loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet:
 
 const value = (name: string) => process.env[name]?.trim() || undefined;
 
+const boundedInteger = (name: string, fallback: number, minimum: number, maximum: number) => {
+  const parsed = Number(value(name));
+  return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+};
+
 export const config = {
   port: Number(value("PORT") ?? 4000),
+  cronSecret: value("CRON_SECRET"),
+  retentionDays: boundedInteger("RETENTION_DAYS", 60, 30, 365),
   webOrigins: (value("WEB_ORIGIN") ?? "http://localhost:3000")
     .split(",")
     .map((origin) => origin.trim()),

@@ -29,3 +29,17 @@ export async function getRequestUser(request: FastifyRequest): Promise<User | nu
   if (error) return null;
   return data.user;
 }
+
+export async function runDatabaseMaintenance(retentionDays: number) {
+  const database = getSupabaseAdmin();
+  if (!database) throw new Error("Database is not configured");
+
+  const { data, error } = await database.rpc("run_service_maintenance", { retention_window_days: retentionDays });
+  if (error) throw new Error(`Database maintenance failed: ${error.message}`);
+  return data as {
+    livenessAction: "inserted" | "deleted";
+    cleanupRan: boolean;
+    deleted: Record<string, number>;
+    cutoff: string;
+  };
+}

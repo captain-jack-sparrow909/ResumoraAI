@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   analyzeResume,
   applicationActivitySchema,
@@ -43,8 +43,8 @@ import {
   writeCoverLetterWithDeepSeek,
 } from "./services/deepseek.js";
 import { extractResumeText, inferBasics } from "./services/importer.js";
-import { createUploadUrl } from "./services/r2.js";
-import { getRequestUser, getSupabaseAdmin } from "./services/supabase.js";
+import { createUploadUrl, deleteExpiredImports } from "./services/r2.js";
+import { getRequestUser, getSupabaseAdmin, runDatabaseMaintenance } from "./services/supabase.js";
 
 const app = Fastify({ logger: true, bodyLimit: 2_500_000 });
 
@@ -66,6 +66,31 @@ app.get("/health", async () => ({
   model: config.deepseek.model,
   timestamp: new Date().toISOString(),
 }));
+
+const hasValidCronAuthorization = (authorization: string | undefined) => {
+  if (!config.cronSecret || !authorization?.startsWith("Bearer ")) return false;
+  const supplied = authorization.slice("Bearer ".length).trim();
+  if (!supplied) return false;
+  const expectedHash = createHash("sha256").update(config.cronSecret).digest();
+  const suppliedHash = createHash("sha256").update(supplied).digest();
+  return timingSafeEqual(expectedHash, suppliedHash);
+};
+
+app.get("/internal/cron/keepalive", async (request, reply) => {
+  if (!config.cronSecret) return reply.code(503).send({ error: "Cron maintenance is not configured" });
+  if (!hasValidCronAuthorization(request.headers.authorization)) return reply.code(401).send({ error: "Invalid cron authorization" });
+
+  try {
+    const database = await runDatabaseMaintenance(config.retentionDays);
+    const storage = database.cleanupRan
+      ? await deleteExpiredImports(config.retentionDays)
+      : { skipped: true, reason: "Retention cleanup runs at most once every 24 hours" };
+    return { status: "ok", service: "resumora-api", retentionDays: config.retentionDays, database, storage, timestamp: new Date().toISOString() };
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(503).send({ status: "degraded", error: "Maintenance did not complete", timestamp: new Date().toISOString() });
+  }
+});
 
 app.post("/v1/analyze", async (request, reply) => {
   const parsed = resumeSchema.safeParse(request.body);
