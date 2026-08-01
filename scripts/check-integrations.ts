@@ -71,6 +71,65 @@ async function checkSupabase() {
         ? `table ${missingPhaseThree.table} failed (${missingPhaseThree.result.error?.code ?? "database error"}); apply the Phase 3 migration`
         : "all four application workspace tables are available",
     );
+    const collaborationChecks = await Promise.all(
+      ["application_review_invites"].map(async (table) => ({
+        table,
+        result: await admin.from(table).select("id", { head: true, count: "exact" }).limit(1),
+      })),
+    );
+    const missingCollaboration = collaborationChecks.find(({ result }) => result.error);
+    const reviewColumnCheck = await admin.from("application_reviews").select("invite_id,decision", { head: true, count: "exact" }).limit(1);
+    record(
+      "Supabase Reviews",
+      !missingCollaboration && !reviewColumnCheck.error,
+      missingCollaboration
+        ? `table ${missingCollaboration.table} failed (${missingCollaboration.result.error?.code ?? "database error"}); apply the Phase 3 collaboration migration`
+        : reviewColumnCheck.error
+          ? `review decision columns failed (${reviewColumnCheck.error.code ?? "database error"}); apply the Phase 3 collaboration migration`
+          : "hashed invitations and reviewer decision fields are available",
+    );
+    const phaseFourChecks = await Promise.all(
+      [
+        { table: "career_goals", key: "user_id" },
+        { table: "career_outcomes", key: "id" },
+        { table: "career_learning_plans", key: "id" },
+        { table: "career_coaching_sessions", key: "id" },
+      ].map(async ({ table, key }) => ({
+        table,
+        result: await admin.from(table).select(key, { head: true, count: "exact" }).limit(1),
+      })),
+    );
+    const missingPhaseFour = phaseFourChecks.find(({ result }) => result.error);
+    record(
+      "Supabase Phase 4",
+      !missingPhaseFour,
+      missingPhaseFour
+        ? `table ${missingPhaseFour.table} failed (${missingPhaseFour.result.error?.code ?? "database error"}); apply the Phase 4 migration`
+        : "career goals, outcomes, learning plans, and coaching tables are available",
+    );
+    const publishingChecks = await Promise.all(
+      [
+        { table: "portfolio_publications", key: "id" },
+        { table: "organizations", key: "id" },
+        { table: "organization_members", key: "organization_id" },
+        { table: "organization_invites", key: "id" },
+        { table: "organization_data_grants", key: "organization_id" },
+        { table: "organization_participant_profiles", key: "organization_id" },
+        { table: "organization_cohorts", key: "id" },
+        { table: "organization_cohort_members", key: "cohort_id" },
+      ].map(async ({ table, key }) => ({
+        table,
+        result: await admin.from(table).select(key, { head: true, count: "exact" }).limit(1),
+      })),
+    );
+    const missingPublishing = publishingChecks.find(({ result }) => result.error);
+    record(
+      "Supabase Phase 4B",
+      !missingPublishing,
+      missingPublishing
+        ? `table ${missingPublishing.table} failed (${missingPublishing.result.error?.code ?? "database error"}); apply the Phase 4 publishing migration`
+        : "portfolio publishing, memberships, consent grants, and cohort tables are available",
+    );
   } catch {
     record("Supabase DB", false, "could not query the project database");
   }

@@ -1,17 +1,22 @@
 import type { ResumeDocument } from "@resumora/domain";
 import { Globe2, Mail, MapPin, Phone } from "lucide-react";
+import { resumeLabels } from "@/lib/resume-localization";
 
-const formatDate = (date: string) => {
+const localeFor = { en: "en", ar: "ar", fr: "fr", es: "es", de: "de", pt: "pt" } as const;
+const formatDate = (date: string, language: keyof typeof localeFor) => {
   if (!date || date === "Present") return date;
   if (/^\d{4}$/.test(date)) return date;
   const [year, month] = date.split("-");
   const value = new Date(Number(year), Number(month) - 1);
-  return Number.isNaN(value.valueOf()) ? date : value.toLocaleDateString("en", { month: "short", year: "numeric" });
+  return Number.isNaN(value.valueOf()) ? date : value.toLocaleDateString(localeFor[language], { month: "short", year: "numeric" });
 };
 
 export function ResumePreview({ resume }: { resume: ResumeDocument }) {
+  const language = resume.language ?? "en";
+  const direction = resume.direction ?? (language === "ar" ? "rtl" : "ltr");
+  const labels = resumeLabels[language];
   return (
-    <article className={`resume-paper template-${resume.template}`} id="resume-document">
+    <article className={`resume-paper template-${resume.template}`} id="resume-document" lang={language} dir={direction}>
       <header className="paper-header">
         <div className="paper-monogram">{resume.basics.fullName.split(" ").map((part) => part[0]).slice(0, 2).join("") || "R"}</div>
         <div>
@@ -26,16 +31,16 @@ export function ResumePreview({ resume }: { resume: ResumeDocument }) {
         {resume.basics.links[0]?.url && <span><Globe2 />{resume.basics.links[0].url}</span>}
       </div>
 
-      {resume.summary && <PaperSection title="Profile"><p className="paper-summary">{resume.summary}</p></PaperSection>}
+      {resume.summary && <PaperSection title={labels.profile}><p className="paper-summary">{resume.summary}</p></PaperSection>}
 
       {resume.experience.length > 0 && (
-        <PaperSection title="Experience">
+        <PaperSection title={labels.experience}>
           <div className="paper-stack">
             {resume.experience.map((item) => (
               <div className="paper-entry" key={item.id}>
                 <div className="paper-entry-head">
                   <div><h3>{item.role}</h3><strong>{item.company}</strong></div>
-                  <div className="paper-date"><span>{formatDate(item.startDate)} — {item.current ? "Present" : formatDate(item.endDate)}</span><small>{item.location}</small></div>
+                  <div className="paper-date"><span>{formatDate(item.startDate, language)} — {item.current ? labels.present : formatDate(item.endDate, language)}</span><small>{item.location}</small></div>
                 </div>
                 <ul>{item.bullets.filter(Boolean).map((bullet, index) => <li key={`${item.id}-${index}`}>{bullet}</li>)}</ul>
               </div>
@@ -45,10 +50,10 @@ export function ResumePreview({ resume }: { resume: ResumeDocument }) {
       )}
 
       {resume.education.length > 0 && (
-        <PaperSection title="Education">
+        <PaperSection title={labels.education}>
           {resume.education.map((item) => (
             <div className="paper-entry-head education-row" key={item.id}>
-              <div><h3>{item.degree}{item.field ? ` in ${item.field}` : ""}</h3><strong>{item.institution}</strong></div>
+              <div><h3>{item.degree}{item.field ? ` ${labels.in} ${item.field}` : ""}</h3><strong>{item.institution}</strong></div>
               <div className="paper-date"><span>{item.endDate}</span><small>{item.location}</small></div>
             </div>
           ))}
@@ -56,7 +61,7 @@ export function ResumePreview({ resume }: { resume: ResumeDocument }) {
       )}
 
       {resume.skills.length > 0 && (
-        <PaperSection title="Skills">
+        <PaperSection title={labels.skills}>
           <div className="paper-skills">
             {resume.skills.map((group) => <p key={group.id}><strong>{group.name}</strong><span>{group.items.join(" · ")}</span></p>)}
           </div>

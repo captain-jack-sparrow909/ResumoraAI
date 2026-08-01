@@ -1,6 +1,10 @@
 import type { ResumeDocument } from "@resumora/domain";
+import { resumeLabels } from "@/lib/resume-localization";
 
 export async function exportDocx(resume: ResumeDocument) {
+  const language = resume.language ?? "en";
+  const labels = resumeLabels[language];
+  const alignment = (resume.direction ?? "ltr") === "rtl" ? "right" : "left";
   const {
     AlignmentType,
     BorderStyle,
@@ -31,9 +35,9 @@ export async function exportDocx(resume: ResumeDocument) {
       spacing: { after: 250 },
       border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "C8D8D4" } },
     }),
-    sectionHeading("Professional summary", Paragraph, TextRun, HeadingLevel),
-    new Paragraph({ text: resume.summary, spacing: { after: 220, line: 280 } }),
-    sectionHeading("Experience", Paragraph, TextRun, HeadingLevel),
+    sectionHeading(labels.profile, Paragraph, TextRun, HeadingLevel),
+    new Paragraph({ text: resume.summary, alignment: alignment as never, spacing: { after: 220, line: 280 } }),
+    sectionHeading(labels.experience, Paragraph, TextRun, HeadingLevel),
   ];
 
   for (const item of resume.experience) {
@@ -46,25 +50,25 @@ export async function exportDocx(resume: ResumeDocument) {
         spacing: { before: 100, after: 30 },
       }),
       new Paragraph({
-        children: [new TextRun({ text: `${item.startDate} – ${item.current ? "Present" : item.endDate}  •  ${item.location}`, italics: true, size: 18, color: "536967" })],
+        children: [new TextRun({ text: `${item.startDate} – ${item.current ? labels.present : item.endDate}  •  ${item.location}`, italics: true, size: 18, color: "536967" })],
         spacing: { after: 40 },
       }),
       ...item.bullets.filter(Boolean).map((bullet) => new Paragraph({ text: bullet, bullet: { level: 0 }, spacing: { after: 50, line: 260 } })),
     );
   }
 
-  sections.push(sectionHeading("Education", Paragraph, TextRun, HeadingLevel));
+  sections.push(sectionHeading(labels.education, Paragraph, TextRun, HeadingLevel));
   for (const item of resume.education) {
     sections.push(new Paragraph({
       children: [
-        new TextRun({ text: `${item.degree}${item.field ? ` in ${item.field}` : ""}`, bold: true }),
+        new TextRun({ text: `${item.degree}${item.field ? ` ${labels.in} ${item.field}` : ""}`, bold: true }),
         new TextRun({ text: ` — ${item.institution}, ${item.endDate}`, color: "536967" }),
       ],
       spacing: { after: 100 },
     }));
   }
 
-  sections.push(sectionHeading("Skills", Paragraph, TextRun, HeadingLevel));
+  sections.push(sectionHeading(labels.skills, Paragraph, TextRun, HeadingLevel));
   for (const group of resume.skills) {
     sections.push(new Paragraph({
       children: [new TextRun({ text: `${group.name}: `, bold: true }), new TextRun(group.items.join(", "))],

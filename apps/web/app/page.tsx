@@ -33,6 +33,9 @@ export default function Home() {
           <a href="#standards">Our standard</a>
           <Link href="/workspace">Job workspace</Link>
           <Link href="/applications">Applications</Link>
+          <Link href="/intelligence">Career intelligence</Link>
+          <Link href="/portfolio">Portfolio</Link>
+          <Link href="/organizations">Organizations</Link>
         </div>
         <Link className="button button-quiet" href="/login">Sign in</Link>
       </nav>

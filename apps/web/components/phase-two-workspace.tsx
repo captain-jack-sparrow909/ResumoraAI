@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight, BookOpenCheck, BriefcaseBusiness, Check, ChevronRight, CircleAlert,
+  ArrowRight, BookOpenCheck, BrainCircuit, BriefcaseBusiness, Check, ChevronRight, CircleAlert,
   FileCheck2, FilePenLine, LayoutDashboard, LibraryBig, LoaderCircle, LockKeyhole,
-  Plus, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, WandSparkles, X,
+  Link2, Plus, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, UserRoundSearch, WandSparkles, X,
 } from "lucide-react";
 import {
   demoCareerEvidence,
@@ -59,6 +59,7 @@ export function PhaseTwoWorkspace() {
   const [jobText, setJobText] = useState(sampleJob);
   const [job, setJob] = useState<JobAnalysis>(() => parseJobDescription(sampleJob));
   const [jobSource, setJobSource] = useState<"deepseek" | "deterministic">("deterministic");
+  const [capturedSourceUrl, setCapturedSourceUrl] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [tailoring, setTailoring] = useState(false);
   const [coverLoading, setCoverLoading] = useState(false);
@@ -75,6 +76,20 @@ export function PhaseTwoWorkspace() {
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
+      const captureValue = new URLSearchParams(window.location.hash.slice(1)).get("capture");
+      if (captureValue) {
+        try {
+          const capture = decodeJobCapture(captureValue);
+          if (capture.text.length >= 80) {
+            const parsed = parseJobDescription(capture.text);
+            setJobText(capture.text);
+            setJob({ ...parsed, role: capture.title || parsed.role, company: capture.company || parsed.company });
+            setCapturedSourceUrl(capture.url);
+            setNotice(`Captured ${capture.title || "job page"}. Review the text, then analyze requirements.`);
+          }
+        } catch { setNotice("The captured job could not be read. Paste the description manually."); }
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
       const storedResume = localStorage.getItem("resumora:resume");
       const storedEvidence = localStorage.getItem("resumora:career-vault");
       if (storedResume) {
@@ -218,7 +233,7 @@ export function PhaseTwoWorkspace() {
       role: job.role,
       company: job.company,
       location: "",
-      sourceUrl: "",
+      sourceUrl: capturedSourceUrl,
       status: "preparing",
       matchScore: report.overall,
       resumeId: targeted.id,
@@ -255,6 +270,8 @@ export function PhaseTwoWorkspace() {
           <button className={view === "tailor" ? "active" : ""} onClick={() => setView("tailor")}><Target size={16} /> Tailor to a job</button>
           <button className={view === "vault" ? "active" : ""} onClick={() => setView("vault")}><LibraryBig size={16} /> Career Vault</button>
           <button onClick={() => router.push("/applications")}><LayoutDashboard size={16} /> Applications</button>
+          <button onClick={() => router.push("/profile-check")}><UserRoundSearch size={16} /> Profile check</button>
+          <button onClick={() => router.push("/intelligence")}><BrainCircuit size={16} /> Intelligence</button>
         </nav>
         <div className="workspace-actions"><span><LockKeyhole size={13} /> {cloudStatus === "syncing" ? "Syncing workspace" : cloudStatus === "synced" ? "Private · synced" : "Private · local"}</span><button onClick={() => router.push("/builder")}>Resume editor <ArrowRight size={15} /></button></div>
       </header>
@@ -283,6 +300,7 @@ export function PhaseTwoWorkspace() {
 
             <div className="job-input-card">
               <div className="card-title"><span><BriefcaseBusiness size={17} /> Job description</span><small>{jobText.length.toLocaleString()} characters</small></div>
+              {capturedSourceUrl && <a className="capture-source" href={capturedSourceUrl} target="_blank" rel="noreferrer"><Link2 size={13} /> Captured from source page</a>}
               <textarea aria-label="Job description" value={jobText} onChange={(event) => setJobText(event.target.value)} rows={9} />
               <div className="job-input-footer"><span><ShieldCheck size={14} /> Pasted text is treated as untrusted data.</span><button onClick={runJobAnalysis} disabled={analyzing}>{analyzing ? <LoaderCircle className="spin" size={16} /> : <SearchCheck size={16} />} Analyze requirements</button></div>
             </div>
@@ -377,3 +395,17 @@ function CoverLetterModal({ cover, evidence, onClose }: { cover: CoverLetter; ev
 
 function splitList(value: string) { return value.split(",").map((item) => item.trim()).filter(Boolean); }
 function normalizeId(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50); }
+function decodeJobCapture(value: string): { title: string; company: string; url: string; text: string } {
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const binary = atob(normalized);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const payload = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  if (typeof payload.text !== "string" || payload.text.length > 30000) throw new Error("Invalid capture");
+  const safeUrl = typeof payload.url === "string" && /^https?:\/\//i.test(payload.url) ? payload.url : "";
+  return {
+    title: typeof payload.title === "string" ? payload.title.slice(0, 180) : "",
+    company: typeof payload.company === "string" ? payload.company.slice(0, 160) : "",
+    url: safeUrl,
+    text: payload.text,
+  };
+}

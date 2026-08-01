@@ -32,10 +32,15 @@ export const skillGroupSchema = z.object({
   items: z.array(z.string()),
 });
 
+export const documentLanguageSchema = z.enum(["en", "ar", "fr", "es", "de", "pt"]);
+export const documentDirectionSchema = z.enum(["ltr", "rtl"]);
+
 export const resumeSchema = z.object({
   id: z.string(),
   title: z.string(),
   template: z.enum(["slate", "linear", "meridian", "executive", "compact"]),
+  language: documentLanguageSchema.default("en"),
+  direction: documentDirectionSchema.default("ltr"),
   basics: z.object({
     fullName: z.string(),
     headline: z.string(),
@@ -58,6 +63,8 @@ export type ResumeDocument = z.infer<typeof resumeSchema>;
 export type Experience = z.infer<typeof experienceSchema>;
 export type Education = z.infer<typeof educationSchema>;
 export type SkillGroup = z.infer<typeof skillGroupSchema>;
+export type DocumentLanguage = z.infer<typeof documentLanguageSchema>;
+export type DocumentDirection = z.infer<typeof documentDirectionSchema>;
 
 export const careerEvidenceSchema = z.object({
   id: z.string(),
@@ -251,6 +258,8 @@ export const demoResume: ResumeDocument = {
   id: "resume-demo",
   title: "Senior Product Designer — Core",
   template: "slate",
+  language: "en",
+  direction: "ltr",
   basics: {
     fullName: "Maya Chen",
     headline: "Senior Product Designer",
@@ -322,7 +331,7 @@ const knownSkills = [
   "team management", "TypeScript", "user research", "UX design", "visual design",
 ];
 
-const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
+const normalize = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}+#.]+/gu, " ").trim();
 const unique = (items: string[]) => [...new Map(items.filter(Boolean).map((item) => [normalize(item), item.trim()])).values()];
 
 export function parseJobDescription(description: string): JobAnalysis {
@@ -527,6 +536,35 @@ export const applicationActivitySchema = z.object({
   createdAt: z.string(),
 });
 
+export const reviewTargetSchema = z.enum(["application", "resume", "cover_letter"]);
+export const reviewDecisionSchema = z.enum(["comment", "approved", "changes_requested"]);
+
+export const applicationReviewInviteSchema = z.object({
+  id: z.string(),
+  applicationId: z.string(),
+  reviewerName: z.string().default(""),
+  reviewerEmail: z.string().email(),
+  role: z.enum(["mentor", "reviewer", "hiring_coach"]).default("reviewer"),
+  target: reviewTargetSchema,
+  expiresAt: z.string(),
+  revokedAt: z.string().nullable().default(null),
+  acceptedAt: z.string().nullable().default(null),
+  createdAt: z.string(),
+});
+
+export const applicationReviewSchema = z.object({
+  id: z.string(),
+  applicationId: z.string(),
+  inviteId: z.string().nullable().default(null),
+  authorName: z.string(),
+  target: reviewTargetSchema,
+  body: z.string(),
+  decision: reviewDecisionSchema.default("comment"),
+  status: z.enum(["open", "resolved"]).default("open"),
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable().default(null),
+});
+
 export const interviewQuestionSchema = z.object({
   id: z.string(),
   category: z.enum(["role", "behavioral", "technical", "leadership", "company"]),
@@ -548,8 +586,88 @@ export const interviewPackSchema = z.object({
 export type ApplicationStatus = z.infer<typeof applicationStatusSchema>;
 export type JobApplication = z.infer<typeof applicationSchema>;
 export type ApplicationActivity = z.infer<typeof applicationActivitySchema>;
+export type ApplicationReviewInvite = z.infer<typeof applicationReviewInviteSchema>;
+export type ApplicationReview = z.infer<typeof applicationReviewSchema>;
 export type InterviewQuestion = z.infer<typeof interviewQuestionSchema>;
 export type InterviewPack = z.infer<typeof interviewPackSchema>;
+
+export type ProfileConsistencyFinding = {
+  id: string;
+  category: "identity" | "headline" | "experience" | "skills" | "dates";
+  severity: "aligned" | "review" | "missing";
+  title: string;
+  explanation: string;
+};
+
+export type ProfileConsistencyReport = {
+  overall: number;
+  aligned: number;
+  review: number;
+  missing: number;
+  findings: ProfileConsistencyFinding[];
+  checkedAt: string;
+};
+
+export function checkProfileConsistency(resume: ResumeDocument, profileText: string): ProfileConsistencyReport {
+  const profile = normalize(profileText);
+  const findings: ProfileConsistencyFinding[] = [];
+  const add = (finding: ProfileConsistencyFinding) => findings.push(finding);
+  const isPresent = (value: string) => Boolean(value.trim()) && profile.includes(normalize(value));
+
+  add(isPresent(resume.basics.fullName)
+    ? { id: "identity-name", category: "identity", severity: "aligned", title: "Name is aligned", explanation: "The same name appears in both documents." }
+    : { id: "identity-name", category: "identity", severity: "review", title: "Check the displayed name", explanation: "Your resume name was not found in the profile text. Confirm spelling and preferred-name formatting." });
+
+  add(isPresent(resume.basics.headline)
+    ? { id: "headline", category: "headline", severity: "aligned", title: "Headline is aligned", explanation: "The professional headline is consistent." }
+    : { id: "headline", category: "headline", severity: "review", title: "Headline differs", explanation: "Align role and seniority wording where truthful; small positioning differences can be intentional." });
+
+  for (const experience of resume.experience) {
+    const companyPresent = isPresent(experience.company);
+    const rolePresent = isPresent(experience.role);
+    add({
+      id: `experience-${experience.id}`,
+      category: "experience",
+      severity: companyPresent && rolePresent ? "aligned" : companyPresent || rolePresent ? "review" : "missing",
+      title: companyPresent && rolePresent ? `${experience.company} is aligned` : `Check ${experience.company || experience.role}`,
+      explanation: companyPresent && rolePresent
+        ? "Employer and role appear in both documents."
+        : companyPresent || rolePresent
+          ? "Only the employer or role matched. Confirm title wording without inflating seniority."
+          : "This resume position was not found in the pasted profile text.",
+    });
+
+    const dates = [experience.startDate.slice(0, 4), experience.current ? "" : experience.endDate.slice(0, 4)].filter(Boolean);
+    if (dates.length) add({
+      id: `dates-${experience.id}`,
+      category: "dates",
+      severity: dates.every((date) => profile.includes(date)) ? "aligned" : "review",
+      title: dates.every((date) => profile.includes(date)) ? `${experience.company} dates appear aligned` : `Review ${experience.company} dates`,
+      explanation: dates.every((date) => profile.includes(date)) ? "The resume years appear in the profile." : "One or more resume years were not found. Check for timeline discrepancies or different date precision.",
+    });
+  }
+
+  const skills = unique(resume.skills.flatMap((group) => group.items));
+  const missingSkills = skills.filter((skill) => !isPresent(skill));
+  add({
+    id: "skills",
+    category: "skills",
+    severity: missingSkills.length <= Math.max(2, Math.floor(skills.length * 0.3)) ? "aligned" : "review",
+    title: missingSkills.length ? `${skills.length - missingSkills.length} of ${skills.length} resume skills appear in the profile` : "Skills are aligned",
+    explanation: missingSkills.length ? `Consider adding relevant, defensible skills to the profile: ${missingSkills.slice(0, 6).join(", ")}.` : "The searchable skill vocabulary is consistent.",
+  });
+
+  const weights = { aligned: 1, review: 0.45, missing: 0 } as const;
+  const overall = findings.length ? Math.round(findings.reduce((sum, item) => sum + weights[item.severity], 0) / findings.length * 100) : 0;
+  return {
+    overall,
+    aligned: findings.filter((item) => item.severity === "aligned").length,
+    review: findings.filter((item) => item.severity === "review").length,
+    missing: findings.filter((item) => item.severity === "missing").length,
+    findings,
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 export const activeApplicationStatuses: ApplicationStatus[] = ["saved", "preparing", "applied", "interview", "offer"];
 
@@ -705,3 +823,466 @@ export const demoApplications: JobApplication[] = [
     updatedAt: "2026-07-31T15:00:00.000Z",
   },
 ];
+
+export const careerGoalSchema = z.object({
+  targetRoleId: z.string(),
+  targetTitle: z.string(),
+  horizonMonths: z.number().int().min(1).max(36).default(12),
+  weeklyHours: z.number().int().min(1).max(30).default(5),
+  priorities: z.array(z.string()).max(8).default([]),
+  updatedAt: z.string(),
+});
+
+export const careerOutcomeSchema = z.object({
+  id: z.string(),
+  applicationId: z.string().optional(),
+  stage: z.enum(["application", "recruiter_screen", "hiring_manager", "assessment", "onsite", "offer"]),
+  result: z.enum(["pending", "advanced", "rejected", "withdrawn", "accepted"]),
+  reasonTags: z.array(z.string()).max(12).default([]),
+  notes: z.string().max(2000).default(""),
+  occurredAt: z.string(),
+  includeInInsights: z.boolean().default(true),
+  createdAt: z.string(),
+});
+
+export const learningActionSchema = z.object({
+  id: z.string(),
+  skill: z.string(),
+  title: z.string(),
+  rationale: z.string(),
+  method: z.enum(["practice", "project", "course", "credential", "mentoring"]),
+  durationWeeks: z.number().int().min(1).max(24),
+  evidenceTarget: z.string(),
+  status: z.enum(["planned", "in_progress", "completed", "skipped"]).default("planned"),
+});
+
+export const careerLearningPlanSchema = z.object({
+  id: z.string(),
+  targetRoleId: z.string(),
+  title: z.string(),
+  summary: z.string(),
+  actions: z.array(learningActionSchema).max(12),
+  evidenceIds: z.array(z.string()).default([]),
+  model: z.string(),
+  generatedAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const careerCoachFeedbackSchema = z.object({
+  question: z.string(),
+  answer: z.string(),
+  scores: z.object({
+    clarity: z.number().int().min(0).max(100),
+    evidence: z.number().int().min(0).max(100),
+    relevance: z.number().int().min(0).max(100),
+    structure: z.number().int().min(0).max(100),
+  }),
+  strengths: z.array(z.string()).max(6),
+  improvements: z.array(z.string()).max(6),
+  suggestedStructure: z.string(),
+  evidenceIds: z.array(z.string()).default([]),
+  model: z.string(),
+  generatedAt: z.string(),
+});
+
+export const careerMemoryItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["resume", "experience", "evidence", "application", "review", "outcome", "learning"]),
+  title: z.string(),
+  subtitle: z.string().default(""),
+  content: z.string(),
+  skills: z.array(z.string()).default([]),
+  occurredAt: z.string().default(""),
+  sourceId: z.string(),
+});
+
+export type CareerGoal = z.infer<typeof careerGoalSchema>;
+export type CareerOutcome = z.infer<typeof careerOutcomeSchema>;
+export type LearningAction = z.infer<typeof learningActionSchema>;
+export type CareerLearningPlan = z.infer<typeof careerLearningPlanSchema>;
+export type CareerCoachFeedback = z.infer<typeof careerCoachFeedbackSchema>;
+export type CareerMemoryItem = z.infer<typeof careerMemoryItemSchema>;
+
+export type RoleSkill = {
+  name: string;
+  category: "essential" | "technical" | "leadership" | "business";
+  importance: number;
+  aliases?: string[];
+};
+
+export type CareerRole = {
+  id: string;
+  title: string;
+  family: string;
+  level: "individual" | "senior" | "lead" | "executive";
+  description: string;
+  skills: RoleSkill[];
+  adjacentRoleIds: string[];
+};
+
+export const careerRoleTaxonomyVersion = "resumora-2026.08-onet-aligned";
+export const careerRoles: CareerRole[] = [
+  {
+    id: "senior-product-designer", title: "Senior Product Designer", family: "Design", level: "senior",
+    description: "Shapes complex product experiences through research, interaction design, systems thinking, and cross-functional influence.",
+    skills: [
+      { name: "User research", category: "essential", importance: 10, aliases: ["customer research"] },
+      { name: "Interaction design", category: "technical", importance: 10, aliases: ["UX design"] },
+      { name: "Prototyping", category: "technical", importance: 8 },
+      { name: "Design systems", category: "technical", importance: 9 },
+      { name: "Product strategy", category: "business", importance: 8 },
+      { name: "Stakeholder management", category: "leadership", importance: 8 },
+      { name: "Analytics", category: "business", importance: 6, aliases: ["Amplitude", "data analysis"] },
+      { name: "Mentoring", category: "leadership", importance: 6, aliases: ["coaching"] },
+    ], adjacentRoleIds: ["lead-product-designer", "product-manager"],
+  },
+  {
+    id: "lead-product-designer", title: "Lead Product Designer", family: "Design", level: "lead",
+    description: "Sets product design direction, raises team quality, and aligns multiple product areas around customer and business outcomes.",
+    skills: [
+      { name: "Design leadership", category: "leadership", importance: 10, aliases: ["leadership", "team management"] },
+      { name: "Product strategy", category: "business", importance: 10 },
+      { name: "Design systems", category: "technical", importance: 8 },
+      { name: "User research", category: "essential", importance: 8, aliases: ["customer research"] },
+      { name: "Stakeholder management", category: "leadership", importance: 9 },
+      { name: "Mentoring", category: "leadership", importance: 9, aliases: ["coaching"] },
+      { name: "Roadmapping", category: "business", importance: 7 },
+      { name: "Analytics", category: "business", importance: 6, aliases: ["data analysis", "Amplitude"] },
+    ], adjacentRoleIds: ["senior-product-designer", "product-manager"],
+  },
+  {
+    id: "product-manager", title: "Product Manager", family: "Product", level: "senior",
+    description: "Discovers valuable problems, defines product direction, and coordinates delivery and measurement across functions.",
+    skills: [
+      { name: "Product strategy", category: "business", importance: 10 }, { name: "Roadmapping", category: "business", importance: 9 },
+      { name: "Customer research", category: "essential", importance: 8, aliases: ["user research"] }, { name: "Analytics", category: "technical", importance: 8, aliases: ["data analysis", "Amplitude"] },
+      { name: "Stakeholder management", category: "leadership", importance: 9 }, { name: "Prioritization", category: "business", importance: 9 },
+      { name: "Experimentation", category: "technical", importance: 7, aliases: ["A/B testing"] }, { name: "Communication", category: "leadership", importance: 8 },
+    ], adjacentRoleIds: ["senior-product-designer", "marketing-manager"],
+  },
+  {
+    id: "software-engineer", title: "Senior Software Engineer", family: "Engineering", level: "senior",
+    description: "Designs, delivers, and operates reliable software while improving engineering quality and team execution.",
+    skills: [
+      { name: "Software architecture", category: "technical", importance: 10 }, { name: "TypeScript", category: "technical", importance: 8, aliases: ["JavaScript"] },
+      { name: "System design", category: "technical", importance: 10 }, { name: "Testing", category: "technical", importance: 8 },
+      { name: "Cloud infrastructure", category: "technical", importance: 7, aliases: ["AWS", "Azure"] }, { name: "Databases", category: "technical", importance: 8, aliases: ["PostgreSQL", "SQL"] },
+      { name: "Mentoring", category: "leadership", importance: 6 }, { name: "Communication", category: "essential", importance: 7 },
+    ], adjacentRoleIds: ["platform-engineer", "engineering-manager"],
+  },
+  {
+    id: "platform-engineer", title: "Platform Engineer", family: "Engineering", level: "senior",
+    description: "Builds reliable internal platforms, delivery systems, and cloud foundations that improve developer effectiveness.",
+    skills: [
+      { name: "Kubernetes", category: "technical", importance: 10 }, { name: "Cloud infrastructure", category: "technical", importance: 10, aliases: ["AWS", "Azure"] },
+      { name: "Docker", category: "technical", importance: 8 }, { name: "Observability", category: "technical", importance: 9 },
+      { name: "Infrastructure as code", category: "technical", importance: 9 }, { name: "System design", category: "technical", importance: 8 },
+      { name: "Reliability", category: "essential", importance: 9 }, { name: "Stakeholder management", category: "leadership", importance: 6 },
+    ], adjacentRoleIds: ["software-engineer", "engineering-manager"],
+  },
+  {
+    id: "engineering-manager", title: "Engineering Manager", family: "Engineering", level: "lead",
+    description: "Builds healthy engineering teams, creates delivery clarity, and connects technical direction to business outcomes.",
+    skills: [
+      { name: "People management", category: "leadership", importance: 10, aliases: ["team management"] }, { name: "Technical strategy", category: "technical", importance: 9, aliases: ["software architecture"] },
+      { name: "Mentoring", category: "leadership", importance: 9 }, { name: "Delivery management", category: "business", importance: 9, aliases: ["project management"] },
+      { name: "Stakeholder management", category: "leadership", importance: 8 }, { name: "Hiring", category: "leadership", importance: 7 },
+      { name: "Communication", category: "essential", importance: 9 }, { name: "System design", category: "technical", importance: 7 },
+    ], adjacentRoleIds: ["software-engineer", "platform-engineer"],
+  },
+  {
+    id: "data-scientist", title: "Data Scientist", family: "Data", level: "senior",
+    description: "Uses statistical, analytical, and machine-learning methods to answer consequential product and business questions.",
+    skills: [
+      { name: "Python", category: "technical", importance: 10 }, { name: "SQL", category: "technical", importance: 9 },
+      { name: "Statistics", category: "technical", importance: 10 }, { name: "Machine learning", category: "technical", importance: 9 },
+      { name: "Experimentation", category: "technical", importance: 8, aliases: ["A/B testing"] }, { name: "Data visualization", category: "technical", importance: 7, aliases: ["Tableau"] },
+      { name: "Business strategy", category: "business", importance: 7 }, { name: "Communication", category: "essential", importance: 8 },
+    ], adjacentRoleIds: ["product-manager", "software-engineer"],
+  },
+  {
+    id: "marketing-manager", title: "Marketing Manager", family: "Marketing", level: "lead",
+    description: "Builds go-to-market strategy, develops customer insight, and measures programs that create sustainable demand.",
+    skills: [
+      { name: "Marketing strategy", category: "business", importance: 10 }, { name: "Market research", category: "essential", importance: 9 },
+      { name: "Analytics", category: "technical", importance: 8, aliases: ["Google Analytics", "data analysis"] }, { name: "Positioning", category: "business", importance: 9 },
+      { name: "Campaign management", category: "business", importance: 8 }, { name: "Communication", category: "essential", importance: 9 },
+      { name: "Budget management", category: "business", importance: 7 }, { name: "Team management", category: "leadership", importance: 7 },
+    ], adjacentRoleIds: ["product-manager"],
+  },
+];
+
+export type CareerSkillSignal = RoleSkill & {
+  strength: number;
+  status: "proven" | "emerging" | "gap";
+  evidenceIds: string[];
+  explanation: string;
+};
+
+export type CareerPathStep = { roleId: string; title: string; readiness: number; gapSkills: string[]; kind: "target" | "adjacent" | "stretch" };
+export type CareerOutcomeInsights = { tracked: number; advanced: number; rejected: number; offers: number; interviewConversion: number; topSignals: string[] };
+export type CareerIntelligenceReport = {
+  taxonomyVersion: string;
+  targetRole: CareerRole;
+  readiness: number;
+  provenSkills: number;
+  emergingSkills: number;
+  gapSkills: number;
+  skillSignals: CareerSkillSignal[];
+  paths: CareerPathStep[];
+  learningPlan: CareerLearningPlan;
+  outcomeInsights: CareerOutcomeInsights;
+  generatedAt: string;
+};
+
+const roleFor = (roleId: string) => careerRoles.find((role) => role.id === roleId) ?? careerRoles[0];
+const contentHas = (content: string, terms: string[]) => terms.some((term) => normalize(content).includes(normalize(term)));
+
+export function buildCareerIntelligence(
+  resume: ResumeDocument,
+  evidence: CareerEvidence[],
+  applications: JobApplication[],
+  outcomes: CareerOutcome[],
+  targetRoleId: string,
+): CareerIntelligenceReport {
+  const targetRole = roleFor(targetRoleId);
+  const resumeText = [resume.basics.headline, resume.summary, ...resume.skills.flatMap((group) => group.items), ...resume.experience.flatMap((item) => [item.role, item.company, ...item.bullets])].join(" ");
+  const verifiedEvidence = evidence.filter((item) => item.verified);
+  const skillSignals = targetRole.skills.map((skill): CareerSkillSignal => {
+    const terms = [skill.name, ...(skill.aliases ?? [])];
+    const linked = verifiedEvidence.filter((item) => contentHas(`${item.title} ${item.description} ${item.skills.join(" ")}`, terms));
+    const inResume = contentHas(resumeText, terms);
+    const metricCount = linked.filter((item) => item.metrics.length).length;
+    const strength = Math.min(100, linked.length * 34 + metricCount * 16 + (inResume ? 24 : 0));
+    const status = strength >= 68 ? "proven" : strength >= 28 ? "emerging" : "gap";
+    return {
+      ...skill,
+      strength,
+      status,
+      evidenceIds: linked.map((item) => item.id),
+      explanation: status === "proven"
+        ? `${linked.length} verified record${linked.length === 1 ? "" : "s"}${metricCount ? `, including ${metricCount} with measurable scope` : ""}.`
+        : status === "emerging"
+          ? "Some resume or Career Vault evidence exists, but another concrete outcome would make this more defensible."
+          : "No defensible evidence was found. Build proof before adding this skill to applications.",
+    };
+  }).sort((a, b) => b.importance - a.importance || a.strength - b.strength);
+  const weightTotal = skillSignals.reduce((sum, skill) => sum + skill.importance, 0);
+  const readiness = weightTotal ? Math.round(skillSignals.reduce((sum, skill) => sum + skill.strength * skill.importance, 0) / weightTotal) : 0;
+  const gapSkills = skillSignals.filter((skill) => skill.status !== "proven").slice(0, 5);
+  const now = new Date().toISOString();
+  const learningPlan: CareerLearningPlan = {
+    id: `plan-${targetRole.id}`,
+    targetRoleId: targetRole.id,
+    title: `${targetRole.title} evidence plan`,
+    summary: gapSkills.length ? `Build defensible proof in ${gapSkills.map((skill) => skill.name).join(", ")}.` : "Strengthen depth and recency in already-proven capabilities.",
+    actions: gapSkills.map((skill, index) => ({
+      id: `learn-${targetRole.id}-${normalize(skill.name).replace(/\s+/g, "-")}`,
+      skill: skill.name,
+      title: skill.status === "gap" ? `Create a scoped ${skill.name} proof project` : `Deepen ${skill.name} with a measurable outcome`,
+      rationale: `${skill.name} carries ${skill.importance}/10 importance for ${targetRole.title} and currently has ${skill.strength}/100 evidence strength.`,
+      method: index === 0 ? "project" : index === 1 ? "mentoring" : "practice",
+      durationWeeks: Math.min(8, 3 + index),
+      evidenceTarget: `One verified Career Vault record describing the problem, your decisions, scope, and a truthful outcome for ${skill.name}.`,
+      status: "planned",
+    })),
+    evidenceIds: unique(skillSignals.flatMap((skill) => skill.evidenceIds)),
+    model: "deterministic",
+    generatedAt: now,
+    updatedAt: now,
+  };
+  const includedOutcomes = outcomes.filter((outcome) => outcome.includeInInsights);
+  const advanced = includedOutcomes.filter((outcome) => ["advanced", "accepted"].includes(outcome.result)).length;
+  const rejected = includedOutcomes.filter((outcome) => outcome.result === "rejected").length;
+  const offers = includedOutcomes.filter((outcome) => outcome.stage === "offer").length + applications.filter((application) => application.status === "offer").length;
+  const interviewApplications = applications.filter((application) => ["interview", "offer"].includes(application.status)).length;
+  const appliedApplications = applications.filter((application) => !["saved", "preparing", "withdrawn"].includes(application.status)).length;
+  const tagCounts = includedOutcomes.flatMap((outcome) => outcome.reasonTags).reduce<Record<string, number>>((counts, tag) => ({ ...counts, [tag]: (counts[tag] ?? 0) + 1 }), {});
+  const topSignals = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([tag]) => tag);
+  const paths = [targetRole, ...targetRole.adjacentRoleIds.map(roleFor)].filter((role, index, roles) => roles.findIndex((item) => item.id === role.id) === index).map((role, index): CareerPathStep => {
+    const missing = role.skills.filter((skill) => !contentHas(resumeText + " " + verifiedEvidence.map((item) => `${item.description} ${item.skills.join(" ")}`).join(" "), [skill.name, ...(skill.aliases ?? [])]));
+    return { roleId: role.id, title: role.title, readiness: index === 0 ? readiness : Math.max(20, Math.round(100 - missing.reduce((sum, skill) => sum + skill.importance, 0) * 1.5)), gapSkills: missing.slice(0, 4).map((skill) => skill.name), kind: index === 0 ? "target" : index === 1 ? "adjacent" : "stretch" };
+  });
+  return {
+    taxonomyVersion: careerRoleTaxonomyVersion,
+    targetRole,
+    readiness,
+    provenSkills: skillSignals.filter((skill) => skill.status === "proven").length,
+    emergingSkills: skillSignals.filter((skill) => skill.status === "emerging").length,
+    gapSkills: skillSignals.filter((skill) => skill.status === "gap").length,
+    skillSignals,
+    paths,
+    learningPlan,
+    outcomeInsights: { tracked: includedOutcomes.length, advanced, rejected, offers, interviewConversion: appliedApplications ? Math.round(interviewApplications / appliedApplications * 100) : 0, topSignals },
+    generatedAt: now,
+  };
+}
+
+export function buildCareerMemory(resume: ResumeDocument, evidence: CareerEvidence[], applications: JobApplication[], outcomes: CareerOutcome[]): CareerMemoryItem[] {
+  return [
+    ...resume.experience.map((item): CareerMemoryItem => ({ id: `memory-exp-${item.id}`, kind: "experience", title: item.role, subtitle: item.company, content: item.bullets.join(" "), skills: [], occurredAt: item.endDate || item.startDate, sourceId: item.id })),
+    ...evidence.map((item): CareerMemoryItem => ({ id: `memory-evidence-${item.id}`, kind: "evidence", title: item.title, subtitle: item.organization, content: `${item.description} ${item.metrics.join(" ")}`, skills: item.skills, occurredAt: item.date, sourceId: item.id })),
+    ...applications.map((item): CareerMemoryItem => ({ id: `memory-app-${item.id}`, kind: "application", title: item.role, subtitle: item.company, content: `${item.notes} ${item.nextAction}`, skills: item.job ? [...item.job.requiredSkills, ...item.job.preferredSkills] : [], occurredAt: item.updatedAt, sourceId: item.id })),
+    ...outcomes.map((item): CareerMemoryItem => ({ id: `memory-outcome-${item.id}`, kind: "outcome", title: `${item.stage.replaceAll("_", " ")} · ${item.result}`, subtitle: item.reasonTags.join(" · "), content: item.notes, skills: [], occurredAt: item.occurredAt, sourceId: item.id })),
+  ];
+}
+
+export function searchCareerMemory(items: CareerMemoryItem[], query: string): CareerMemoryItem[] {
+  const tokens = normalize(query).split(" ").filter((token) => token.length > 1);
+  return items.map((item) => {
+    const haystack = normalize(`${item.title} ${item.subtitle} ${item.content} ${item.skills.join(" ")}`);
+    const score = tokens.length ? tokens.reduce((sum, token) => sum + (haystack.includes(token) ? 1 : 0), 0) : 1;
+    return { item, score };
+  }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || b.item.occurredAt.localeCompare(a.item.occurredAt)).slice(0, 30).map(({ item }) => item);
+}
+
+export function buildInterviewCoachFeedback(question: string, answer: string, evidence: CareerEvidence[], targetRoleId: string): CareerCoachFeedback {
+  const verified = evidence.filter((item) => item.verified);
+  const matched = verified.filter((item) => contentHas(answer, [item.title, ...item.skills, ...item.metrics]));
+  const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
+  const hasMetric = /\b\d+(?:[.,]\d+)?(?:%|\+|x|k|m|b)?\b/i.test(answer);
+  const hasSequence = /\b(first|then|after|finally|result|outcome|because|so that)\b/i.test(answer);
+  const role = roleFor(targetRoleId);
+  const relevanceTerms = role.skills.filter((skill) => contentHas(answer, [skill.name, ...(skill.aliases ?? [])]));
+  return {
+    question,
+    answer,
+    scores: {
+      clarity: Math.min(100, wordCount >= 70 && wordCount <= 220 ? 88 : wordCount >= 35 ? 68 : 42),
+      evidence: Math.min(100, matched.length * 28 + (hasMetric ? 28 : 8)),
+      relevance: Math.min(100, 35 + relevanceTerms.length * 16),
+      structure: hasSequence ? 84 : wordCount >= 60 ? 64 : 45,
+    },
+    strengths: [matched.length ? `Connects to ${matched.length} verified Career Vault record${matched.length === 1 ? "" : "s"}.` : "Keeps the answer within the facts supplied for review.", hasMetric ? "Uses concrete scope or outcome evidence." : "The answer can be strengthened without inventing metrics."],
+    improvements: [wordCount < 70 ? "Add enough context to make your responsibility and decisions clear." : "Remove details that do not change the decision or outcome.", !hasMetric ? "Add truthful scale, quality, time, or business impact where available." : "Connect the metric explicitly to your actions.", !hasSequence ? "Use a clear situation → responsibility → actions → result sequence." : "End with what you learned or would repeat."],
+    suggestedStructure: "Situation and constraint → your exact responsibility → two or three decisions → measurable or observable result → lesson relevant to the target role.",
+    evidenceIds: matched.map((item) => item.id),
+    model: "deterministic",
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export const portfolioThemeSchema = z.enum(["editorial", "minimal", "contrast"]);
+export const portfolioStatusSchema = z.enum(["draft", "published", "revoked"]);
+
+export const portfolioPublicationSchema = z.object({
+  id: z.string().min(1).max(140),
+  slug: z.string().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  displayName: z.string().min(1).max(120),
+  headline: z.string().min(1).max(180),
+  bio: z.string().max(1200),
+  location: z.string().max(160).default(""),
+  evidenceIds: z.array(z.string()).max(16),
+  featuredSkills: z.array(z.string().max(80)).max(18).default([]),
+  linkUrls: z.array(z.string().url()).max(12).default([]),
+  theme: portfolioThemeSchema.default("editorial"),
+  showEmail: z.boolean().default(false),
+  contactEmail: z.string().email().or(z.literal("")).default(""),
+  status: portfolioStatusSchema.default("draft"),
+  consentVersion: z.string().min(1).max(40).default("portfolio-v1"),
+  publishedAt: z.string().optional(),
+  updatedAt: z.string(),
+});
+
+export const portfolioProjectSchema = z.object({
+  id: z.string(),
+  type: careerEvidenceSchema.shape.type,
+  title: z.string(),
+  organization: z.string(),
+  description: z.string(),
+  skills: z.array(z.string()),
+  metrics: z.array(z.string()),
+  date: z.string(),
+});
+
+export const publicPortfolioSchema = portfolioPublicationSchema.pick({
+  slug: true,
+  displayName: true,
+  headline: true,
+  bio: true,
+  location: true,
+  featuredSkills: true,
+  theme: true,
+  publishedAt: true,
+}).extend({
+  contactEmail: z.string().email().or(z.literal("")),
+  links: z.array(linkSchema).max(12),
+  projects: z.array(portfolioProjectSchema).max(16),
+});
+
+export type PortfolioPublication = z.infer<typeof portfolioPublicationSchema>;
+export type PublicPortfolio = z.infer<typeof publicPortfolioSchema>;
+
+export function buildPublicPortfolio(publication: PortfolioPublication, resume: ResumeDocument, evidence: CareerEvidence[]): PublicPortfolio {
+  const selectedIds = new Set(publication.evidenceIds);
+  const projects = evidence.filter((item) => item.verified && selectedIds.has(item.id)).map((item) => portfolioProjectSchema.parse({
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    organization: item.organization,
+    description: item.description,
+    skills: item.skills,
+    metrics: item.metrics,
+    date: item.date,
+  }));
+  return publicPortfolioSchema.parse({
+    slug: publication.slug,
+    displayName: publication.displayName,
+    headline: publication.headline,
+    bio: publication.bio,
+    location: publication.location,
+    featuredSkills: publication.featuredSkills,
+    theme: publication.theme,
+    publishedAt: publication.publishedAt,
+    contactEmail: publication.showEmail ? publication.contactEmail : "",
+    links: resume.basics.links.filter((link) => publication.linkUrls.includes(link.url) && /^https?:\/\//i.test(link.url)),
+    projects,
+  });
+}
+
+export const organizationTypeSchema = z.enum(["coaching", "university", "outplacement", "employer"]);
+export const organizationRoleSchema = z.enum(["owner", "admin", "coach", "participant"]);
+export const organizationDataScopeSchema = z.enum(["resume_summary", "career_evidence", "application_progress", "learning_plan"]);
+
+export const organizationSchema = z.object({
+  id: z.string(),
+  name: z.string().min(2).max(140),
+  slug: z.string().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  type: organizationTypeSchema,
+  createdAt: z.string(),
+});
+
+export const organizationMembershipSchema = z.object({
+  organizationId: z.string(),
+  userId: z.string(),
+  displayName: z.string().max(120).default(""),
+  email: z.string().email().or(z.literal("")),
+  role: organizationRoleSchema,
+  joinedAt: z.string(),
+});
+
+export const organizationDataGrantSchema = z.object({
+  organizationId: z.string(),
+  participantUserId: z.string(),
+  scopes: z.array(organizationDataScopeSchema).max(4),
+  consentedAt: z.string(),
+  revokedAt: z.string().optional(),
+});
+
+export const organizationParticipantProfileSchema = z.object({
+  organizationId: z.string(),
+  participantUserId: z.string(),
+  displayName: z.string().max(120),
+  targetTitle: z.string().max(180),
+  readiness: z.number().min(0).max(100),
+  evidenceCount: z.number().int().min(0),
+  applicationsActive: z.number().int().min(0),
+  learningCompleted: z.number().int().min(0),
+  learningTotal: z.number().int().min(0),
+  updatedAt: z.string(),
+});
+
+export type Organization = z.infer<typeof organizationSchema>;
+export type OrganizationMembership = z.infer<typeof organizationMembershipSchema>;
+export type OrganizationDataGrant = z.infer<typeof organizationDataGrantSchema>;
+export type OrganizationParticipantProfile = z.infer<typeof organizationParticipantProfileSchema>;

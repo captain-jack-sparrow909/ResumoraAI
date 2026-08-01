@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Resumora Job Capture",
+  "version": "0.1.0",
+  "description": "Capture the job you are viewing and open it in Resumora's evidence-grounded tailoring workspace.",
+  "permissions": ["activeTab", "scripting", "storage", "contextMenus"],
+  "action": {
+    "default_title": "Capture job for Resumora",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "service-worker.js"
+  }
+}

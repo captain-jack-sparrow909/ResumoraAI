@@ -44,6 +44,18 @@ Every meaningful change can create an append-only activity entry. Application re
 
 Interview packs combine the targeted resume, structured job analysis, and verified Career Vault records. A deterministic generator guarantees useful local preparation. DeepSeek can refine the pack, but returned evidence IDs are filtered server-side against the supplied verified records. Packs contain likely questions, why each is asked, an answer framework, evidence links, likely themes, and questions for the interviewer.
 
+## Job capture and profile consistency
+
+The browser extension uses Manifest V3, requests only active-tab, scripting, storage, and context-menu capabilities, and ships no remotely hosted code. It extracts visible job content only after a user gesture. The payload enters the web app through a URL fragment, so it is not sent in an HTTP request, and the workspace removes the fragment after decoding it.
+
+Profile consistency is a deterministic, client-side comparison between the active resume and text the user chooses to paste from LinkedIn or another professional profile. Resumora does not scrape profiles, request third-party credentials, or automatically overwrite either document.
+
+## Scoped external review
+
+External review invitations are owned by an authenticated user and limited to one application asset: the application overview, targeted resume, or cover letter. The API returns a 256-bit random token once, stores only its SHA-256 hash, and rejects expired or revoked links. Public review routes use the server-only Supabase client after token validation; anonymous database grants are not used. Private notes, the Career Vault, and unrelated applications are excluded from shared payloads.
+
+Reviewers can comment, approve, or request changes. Their feedback is stored on the owner's application record and remains auditable alongside the invitation that authorized it.
+
 ## Persistence
 
 Guest users receive immediate local autosave, local Career Vault storage, and local version snapshots. Authenticated users can sync the same canonical resume, Career Vault, and saved-job data to Supabase. Resumes and variants are structured JSONB documents with indexed ownership, title, score, lineage, and timestamps.
@@ -73,3 +85,31 @@ The AI guardrails are:
 ## Rendering
 
 All templates render one semantic DOM order. PDF export uses print CSS with selectable text. DOCX uses native paragraphs, headings, bullets, and text runs. Decorative elements never contain essential information.
+
+Resume documents also carry an explicit language and text direction. Structural headings and date formatting are localized for six languages, while the user's body copy is preserved verbatim. RTL affects presentation only; semantic section order and plain-text content stay intact for parsing.
+
+## Career intelligence
+
+Phase 4 adds a versioned role graph whose structure follows the O*NET distinction between worker capabilities and job requirements. The initial graph is maintained inside Resumora so guest mode is deterministic and no external taxonomy credential is required. It is a preparation model, not a claim that a title is formally equivalent to a specific O*NET-SOC occupation.
+
+Skill strength is calculated from plain-text resume presence, verified Career Vault records, and measurable scope. Each skill remains visible as proven, emerging, or missing, with its importance, evidence IDs, and explanation. Readiness and adjacent-path values are explicitly described as preparation signals rather than hiring, promotion, salary, or labor-market predictions.
+
+The deterministic engine always produces a gap report, career paths, evidence-building actions, outcome insights, and interview-coaching feedback. DeepSeek may refine action wording or critique an answer, but it receives the deterministic draft and verified evidence ledger, cannot create new skill/action identifiers, and has returned evidence IDs filtered against the supplied records.
+
+## Career memory and outcome privacy
+
+Career-memory search is lexical and owner-scoped. Guest mode searches the current resume, Career Vault, applications, and user-entered outcomes in the browser. Authenticated mode additionally retrieves the user's saved resumes, reviewer feedback, and learning plans through the backend. It does not create or persist opaque embeddings.
+
+Outcomes are explicitly entered by the user. Every outcome has an `includeInInsights` control; excluded records remain private and are omitted from calibration. Resumora does not infer rejection reasons, share raw outcome notes, or describe personal results as general labor-market statistics.
+
+## Consent-based portfolio publishing
+
+The portfolio studio never serves a live Career Vault or resume document. On publication, the backend loads the owner's synced resume and verified Career Vault server-side, rejects unknown or unverified evidence IDs, and creates an immutable public snapshot containing only selected records, selected HTTP(S) links, and an email address when the user explicitly enables it. Phone numbers, private outcomes, applications, coaching answers, and unselected evidence never enter the snapshot.
+
+Public portfolio routes read only snapshots whose status is `published` and whose revocation timestamp is empty. The portfolio table has owner-only RLS and no anonymous grant; Render performs the narrow public lookup with its server credential. Revocation changes the status immediately, while later private edits remain disconnected until the owner publishes a new approved snapshot.
+
+## Organization authorization and participant consent
+
+Organizations use four roles: owner, administrator, coach, and participant. Membership controls access to the workspace itself but does not grant career-data access. Organization invitations contain 256-bit random tokens stored only as SHA-256 hashes, expire within thirty days, are bound to one email address, and require an authenticated matching account to accept.
+
+Participants grant individual scopes for career summary, selected evidence, application progress, and learning-plan progress. The initial staff roster uses only the career-summary scope and a participant-written summary record. Complete resumes, raw Career Vault records, employer notes, outcome interpretations, and coaching answers are not returned. Participants can revoke every scope without deleting their private Resumora data. Cohorts group participants operationally but do not expand the data scopes granted to staff.

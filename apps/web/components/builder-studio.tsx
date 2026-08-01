@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeAnalysis, ResumeDocument } from "@resumora/domain";
 import { analyzeResume, demoResume } from "@resumora/domain";
 import {
-  ArrowLeft, Check, ChevronDown, CircleUserRound, Clock3, Download, FileText,
+  ArrowLeft, BrainCircuit, Check, ChevronDown, CircleUserRound, Clock3, Download, FileText,
   GraduationCap, History, LayoutTemplate, LoaderCircle, PanelRightClose,
   LayoutDashboard, PanelRightOpen, Plus, Printer, Save, ScanSearch, Sparkles, Upload, WandSparkles,
   Target, X,
@@ -15,6 +15,7 @@ import { ResumePreview } from "@/components/resume-preview";
 import { importResume, rewriteContent, saveResumeRemotely } from "@/lib/api";
 import { exportDocx } from "@/lib/export-docx";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { resumeLanguages } from "@/lib/resume-localization";
 
 type SectionId = "basics" | "summary" | "experience" | "education" | "skills" | "design";
 type SavedVersion = { id: string; label: string; createdAt: string; resume: ResumeDocument };
@@ -165,6 +166,7 @@ export function BuilderStudio() {
         <div className="top-actions">
           <Link className="button button-quiet studio-button" href="/workspace"><Target size={16} /> Job match</Link>
           <Link className="icon-button" href="/applications" title="Application pipeline"><LayoutDashboard size={18} /></Link>
+          <Link className="icon-button" href="/intelligence" title="Career intelligence"><BrainCircuit size={18} /></Link>
           <button className="icon-button" onClick={() => setVersionsOpen((value) => !value)} title="Version history"><History size={18} /></button>
           <button className="button button-quiet studio-button" onClick={() => fileRef.current?.click()} disabled={importing}>
             {importing ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />} Import
@@ -293,7 +295,9 @@ function SkillsEditor({ resume, update }: EditorProps) {
 }
 
 function DesignEditor({ resume, update }: EditorProps) {
-  return <div className="template-grid">{templates.map((template) => <button className={resume.template === template.id ? "selected" : ""} key={template.id} onClick={() => update((current) => ({ ...current, template: template.id }))}><div className={`template-thumb thumb-${template.id}`}><i /><i /><i /><i /></div><span><strong>{template.name}</strong><small>{template.note} · ATS safe</small></span>{resume.template === template.id && <Check size={15} />}</button>)}</div>;
+  const language = resume.language ?? "en";
+  const direction = resume.direction ?? "ltr";
+  return <div className="design-settings"><div className="document-settings"><label><span>Document language</span><select value={language} onChange={(event) => { const selected = resumeLanguages.find((item) => item.id === event.target.value)!; update((current) => ({ ...current, language: selected.id, direction: selected.direction })); }}>{resumeLanguages.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><small>Translates structural headings and date formatting. Your content remains unchanged.</small></label><label><span>Text direction</span><select value={direction} onChange={(event) => update((current) => ({ ...current, direction: event.target.value as ResumeDocument["direction"] }))}><option value="ltr">Left to right</option><option value="rtl">Right to left</option></select><small>Use RTL for Arabic and other right-to-left content.</small></label></div><div className="template-grid">{templates.map((template) => <button className={resume.template === template.id ? "selected" : ""} key={template.id} onClick={() => update((current) => ({ ...current, template: template.id }))}><div className={`template-thumb thumb-${template.id}`}><i /><i /><i /><i /></div><span><strong>{template.name}</strong><small>{template.note} · ATS safe</small></span>{resume.template === template.id && <Check size={15} />}</button>)}</div></div>;
 }
 
 function AnalysisPanel({ analysis, onClose, onNavigate }: { analysis: ResumeAnalysis; onClose: () => void; onNavigate: (field?: string) => void }) {

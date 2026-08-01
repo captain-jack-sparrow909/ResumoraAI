@@ -1,6 +1,6 @@
 # Resumora AI
 
-Resumora is a truth-preserving resume, CV, and application workspace. Phase 3 connects the structured editor and evidence-backed tailoring engine to an application pipeline, per-opportunity assets, decision history, follow-up planning, and interview preparation grounded in verified career evidence.
+Resumora is a truth-preserving resume, CV, application, and career-intelligence workspace. Phase 4 connects verified career history to explainable role readiness, evidence gaps, adjacent paths, learning plans, private outcomes, memory retrieval, interview coaching, consent-based portfolios, and scoped organization support.
 
 ## Architecture
 
@@ -37,6 +37,9 @@ Without credentials, the editor and deterministic job-match engine work in local
    - [`supabase/migrations/202607310001_phase_one.sql`](./supabase/migrations/202607310001_phase_one.sql)
    - [`supabase/migrations/202607310002_phase_two.sql`](./supabase/migrations/202607310002_phase_two.sql)
    - [`supabase/migrations/202608010001_phase_three.sql`](./supabase/migrations/202608010001_phase_three.sql)
+   - [`supabase/migrations/202608010002_phase_three_collaboration.sql`](./supabase/migrations/202608010002_phase_three_collaboration.sql)
+   - [`supabase/migrations/202608010003_phase_four_career_intelligence.sql`](./supabase/migrations/202608010003_phase_four_career_intelligence.sql)
+   - [`supabase/migrations/202608010004_phase_four_publishing_organizations.sql`](./supabase/migrations/202608010004_phase_four_publishing_organizations.sql)
 3. Enable Email OTP authentication and add local/Vercel redirect URLs.
 4. Set the public Supabase URL and publishable key in Vercel.
 5. Set the URL, publishable key, and secret key in Render.
@@ -115,17 +118,29 @@ Still scheduled for the next Phase 2 increment: export round-trip parsing that c
 - Deterministic interview fallback, likely themes, answer structures, and questions for the interviewer
 - Authenticated Supabase sync with local-first guest operation
 - Mobile application board, detail workspace, and quick status/plan edits
+- Manifest V3 job capture extension with active-tab access and client-side workspace handoff
+- Expiring, revocable, asset-scoped mentor/reviewer links with comments, approvals, and change requests
+- Local LinkedIn/professional-profile consistency checks without scraping or credentials
+- English, Arabic, French, Spanish, German, and Portuguese document settings with native RTL preview controls
 
-Still scheduled for the next Phase 3 increment: browser-extension capture, external recruiter/mentor invitations and approvals, LinkedIn/profile consistency checks, and multilingual/RTL document variants.
+Load the unpacked extension from [`apps/extension`](./apps/extension) during development. Its popup stores the Resumora workspace origin, captures visible job content from the active tab, and passes the payload in a URL fragment that the workspace removes immediately after import.
 
-### Phase 4 — Career intelligence moat
+### Phase 4 — Career intelligence moat (current)
 
-- Career-history retrieval across old resumes, reviews, projects, and notes
-- Role and skill taxonomy with personalized gap analysis
-- Career paths, learning plans, and interview coaching
-- Privacy-safe outcome tracking to calibrate recommendations against interviews
-- Regression corpus for Workday, Greenhouse, Lever, and other parser patterns
-- Portfolio and personal-site generation from the same Career Vault
-- Organization workspaces for universities, career coaches, and outplacement teams
+- Unified career-memory retrieval across resumes, Career Vault evidence, applications, reviews, outcomes, and learning plans
+- Versioned Resumora role/skill graph aligned to O*NET's worker, job, and market separation
+- Explainable skill strength with proven, emerging, and gap states tied to verified evidence IDs
+- Target and adjacent career paths with preparation signals and explicit missing evidence
+- Deterministic evidence-building learning plans with DeepSeek refinement and progress tracking
+- Evidence-grounded interview answer coaching with four component scores
+- User-entered, privacy-controlled outcome tracking and application-to-interview signals
+- Workday-, Greenhouse-, and Lever-style parser regression fixtures
+- Local-first guest operation with owner-scoped Supabase sync
+- Portfolio studio with per-record, per-link, and email publication consent
+- Immutable public snapshots that expose only selected verified Career Vault records
+- Immediate portfolio revocation with no anonymous database grants
+- Multi-tenant workspaces for coaches, universities, outplacement teams, and employers
+- Owner, administrator, coach, and participant roles with expiring email-bound invitations
+- Participant-controlled data scopes, consent-filtered summaries, and cohort workspaces
 
 Resumora will continue to avoid deceptive “official ATS score” claims and autonomous mass auto-apply. The product optimizes for truthful fit, document readability, and higher-quality applications.

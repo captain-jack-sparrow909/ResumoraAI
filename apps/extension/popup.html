@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Resumora Job Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <div class="brand"><span>R</span><div><strong>Resumora</strong><small>Job Capture</small></div></div>
+      <h1>Tailor from this job.</h1>
+      <p>Capture visible job text, title, company hints, and the source URL. Review everything inside Resumora before using it.</p>
+      <button id="capture">Capture this job</button>
+      <details>
+        <summary>Workspace address</summary>
+        <label>Resumora URL<input id="appUrl" type="url" placeholder="https://your-app.vercel.app" /></label>
+        <button class="secondary" id="save">Save address</button>
+      </details>
+      <div id="status" role="status" aria-live="polite"></div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+:root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #142927; background: #f6f2e9; }
+body { width: 330px; margin: 0; }
+main { padding: 21px; }
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand > span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px 10px 10px 3px; color: white; background: #173e3a; font-family: Georgia, serif; }
+.brand div { display: flex; flex-direction: column; }.brand strong { font-family: Georgia, serif; }.brand small { color: #2f706a; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+h1 { margin: 24px 0 8px; font-family: Georgia, serif; font-size: 26px; font-weight: 500; }
+p { margin: 0 0 18px; color: #4f6461; font-size: 12px; line-height: 1.55; }
+button { width: 100%; min-height: 42px; border: 0; border-radius: 10px; color: white; background: #173e3a; font-weight: 750; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+details { margin-top: 14px; border-top: 1px solid #d9e2df; padding-top: 12px; }
+summary { color: #4f6461; font-size: 11px; cursor: pointer; }
+label { display: grid; gap: 6px; margin-top: 12px; font-size: 10px; font-weight: 700; }
+input { height: 36px; padding: 0 9px; border: 1px solid #cbd9d5; border-radius: 8px; background: white; font: inherit; }
+.secondary { min-height: 34px; margin-top: 8px; color: #173e3a; background: #e5f1ed; font-size: 10px; }
+#status { min-height: 16px; margin-top: 10px; color: #2f706a; font-size: 10px; line-height: 1.4; }
