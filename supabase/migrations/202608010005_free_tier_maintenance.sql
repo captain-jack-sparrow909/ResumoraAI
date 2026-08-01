@@ -101,3 +101,6 @@ $$;
 
 revoke all on function public.run_service_maintenance(integer) from public, anon, authenticated;
 grant execute on function public.run_service_maintenance(integer) to service_role;
+
+-- Make the newly created RPC visible to PostgREST immediately.
+notify pgrst, 'reload schema';
