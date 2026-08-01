@@ -1,150 +1,176 @@
 # Resumora AI
 
-Resumora is a truth-preserving resume, CV, application, and career-intelligence workspace. Phase 4 connects verified career history to explainable role readiness, evidence gaps, adjacent paths, learning plans, private outcomes, memory retrieval, interview coaching, consent-based portfolios, and scoped organization support.
+> **Truthful resumes. Clearer opportunities.** Resumora is a career-intelligence workspace that turns verified experience into machine-readable resumes, evidence-grounded applications, explainable role readiness, and defensible next steps.
 
-## Architecture
+[![Resumora AI product overview](./docs/assets/resumora-hero.jpg)](https://resumora-ai-web.vercel.app/)
 
-```text
-apps/web       Next.js 16 frontend → Vercel
-apps/api       Fastify API → Render
-packages/domain Shared resume schema, scoring rules, fixtures, tests
-supabase       Postgres schema and Row Level Security policies
-Cloudflare R2  Private source documents via short-lived signed URLs
-DeepSeek V4    Truth-preserving writing assistance through the backend only
+<p align="center">
+  <a href="https://resumora-ai-web.vercel.app/"><strong>Live product</strong></a>
+  ·
+  <a href="#product-proof">Product proof</a>
+  ·
+  <a href="#truth-preserving-ai-boundary">Trust model</a>
+  ·
+  <a href="./docs/architecture.md">Architecture</a>
+  ·
+  <a href="#run-it-locally">Quick start</a>
+</p>
+
+<p align="center">
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white">
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
+  <img alt="Fastify" src="https://img.shields.io/badge/Fastify-API-000000?logo=fastify&logoColor=white">
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres-3FCF8E?logo=supabase&logoColor=white">
+  <img alt="DeepSeek" src="https://img.shields.io/badge/DeepSeek-Structured_AI-4D6BFE">
+  <img alt="Evidence grounded" src="https://img.shields.io/badge/AI-evidence--grounded-7C3AED">
+</p>
+
+## Resumora in 30 seconds
+
+Most AI resume tools optimize language first and ask whether the result is true later. Resumora reverses that order: evidence is product data, every suggestion is a proposal, and the original document remains intact until a person accepts a supported change.
+
+- **Verified before generated** — Career Vault records and source IDs ground suggestions in real experience.
+- **Proposals, not silent mutations** — AI output arrives as a reviewable diff; it cannot directly rewrite the canonical resume.
+- **Explainable signals** — readiness and job-match scores expose their components instead of pretending to be an employer's ATS score.
+- **Useful before sign-up** — local mode keeps the core builder available without provider credentials; authenticated users can sync securely.
+
+## Product proof
+
+### A structured resume studio with visible reasoning
+
+![Resumora AI resume builder with live preview and explainable readiness checks](./docs/assets/resumora-builder.jpg)
+
+The editor keeps content, layout, readiness feedback, and a semantic preview in one workspace. Version snapshots preserve lineage while five machine-readable templates keep presentation separate from the canonical document model.
+
+| Workspace | What it does |
+| --- | --- |
+| **Resume Studio** | Structured editing, live preview, localization, version history, PDF and DOCX export |
+| **Career Vault + Claim Ledger** | Stores verified evidence, tracks source IDs, and blocks unsupported claims |
+| **Job Workspace** | Treats job descriptions as untrusted input, then compares them with evidence-backed history |
+| **Application Pipeline** | Tracks roles, stages, activity, materials, and outcomes in one lifecycle |
+| **Career Intelligence** | Surfaces role readiness, skill states, evidence gaps, and practical next actions |
+| **Interview Coach** | Builds preparation prompts from the target role and evidence the candidate can defend |
+| **Portfolio Studio** | Publishes consent-based snapshots without exposing the private working document |
+| **Organizations** | Adds scoped collaboration and participant-controlled visibility for teams and programs |
+
+### Career direction you can defend
+
+![Resumora AI career intelligence workspace showing evidence readiness and priority skill gaps](./docs/assets/resumora-intelligence.jpg)
+
+Career Intelligence uses a versioned, O*NET-aligned role graph and deterministic signals to turn career history into an auditable plan—without reducing a person to an opaque embedding.
+
+## Truth-preserving AI boundary
+
+```mermaid
+flowchart LR
+    H["Resume + career history"] --> E["Evidence ledger"]
+    J["Job description<br/>untrusted input"] --> P["Sanitized parser"]
+    E --> S["Deterministic scoring"]
+    P --> S
+    S --> A["DeepSeek structured proposal"]
+    A --> V["Schema + source validation"]
+    V --> C["Claim Ledger"]
+    C --> R["Human review"]
+    R --> N["Accepted version snapshot"]
+    V -->|"unsupported"| B["Blocked"]
 ```
 
-The editor stores content as validated structured data. Templates only control presentation, so changing a design cannot change document reading order. PDF output uses the browser's print-quality A4 renderer and DOCX output contains native text and paragraph structures.
+The model never writes directly to the canonical document. Server-side prompts receive only the evidence IDs allowed for the task; structured responses are validated before they reach the Claim Ledger, and unsupported claims cannot be accepted.
 
-## Run locally
+## System architecture
 
-Requirements: Node.js 22 or newer.
+```mermaid
+flowchart TB
+    U["Browser / local mode"] --> W["Next.js 16 web app"]
+    X["MV3 job-capture extension"] -->|"client-side fragment handoff"| W
+    W --> D["Shared @resumora/domain schemas"]
+    W --> API["Fastify API"]
+    API --> D
+    API --> DB["Supabase Auth + Postgres / RLS"]
+    API --> R2["Cloudflare R2 private documents"]
+    API --> AI["DeepSeek structured proposals"]
+    API --> PUB["Immutable public portfolio snapshots"]
+```
+
+| Engineering concern | Implementation |
+| --- | --- |
+| **Domain integrity** | Shared Zod schemas, deterministic scoring, immutable snapshots, and explicit version lineage |
+| **AI safety** | Untrusted job-input boundary, evidence source IDs, structured responses, and unsupported-claim blocking |
+| **Privacy** | Row-level security, hashed review tokens, short-lived R2 URLs, retention controls, and consent scopes |
+| **Document quality** | Semantic screen rendering, selectable-text PDFs, and native DOCX paragraphs |
+| **Full-stack scope** | Resume building, applications, interviews, intelligence, publishing, organizations, and a browser extension |
+| **Resilience** | Local-first guest state plus authenticated synchronization and provider-aware fallbacks |
+| **Verification** | Domain tests, type checks, linting, production builds, and integration-contract checks |
+
+## Trust boundaries that matter
+
+- **Job descriptions are data, not instructions.** Imported content is sanitized before it can influence an AI request.
+- **Review links are capability tokens.** They are random, stored as hashes, revocable, and can expire.
+- **Documents remain private by default.** Object access uses namespaced keys and short-lived signed URLs.
+- **Exports stay usable outside Resumora.** PDF output retains selectable text; DOCX output uses native paragraphs.
+- **Publishing is deliberate.** Public portfolios use immutable, consent-based snapshots rather than the private working state.
+- **Multilingual by design.** The document model supports six languages, including right-to-left layouts.
+
+## Repository map
+
+```text
+ResumoraAI/
+├── apps/
+│   ├── web/           # Next.js product UI, exports, portfolios, and review views
+│   ├── api/           # Fastify API, auth, storage, imports, and AI orchestration
+│   └── extension/     # Manifest V3 job-capture extension
+├── packages/domain/   # Canonical schemas, scoring logic, and domain tests
+├── supabase/          # RLS-aware database migrations
+└── docs/              # Architecture, trust boundaries, and implementation notes
+```
+
+- [`apps/web`](./apps/web) — product interface and document rendering
+- [`apps/api`](./apps/api) — server boundary and provider integrations
+- [`packages/domain`](./packages/domain) — shared source of truth
+- [`apps/extension`](./apps/extension) — privacy-conscious job capture
+- [`supabase/migrations`](./supabase/migrations) — database evolution and access policies
+- [`docs/architecture.md`](./docs/architecture.md) — deeper system design and security notes
+
+## Run it locally
+
+### Prerequisites
+
+- Node.js 22+
+- npm
 
 ```bash
+git clone https://github.com/captain-jack-sparrow909/ResumoraAI.git
+cd ResumoraAI
 cp .env.example .env
 npm install
 npm run dev
 ```
 
-- Frontend: `http://localhost:3000`
-- Backend health: `http://localhost:4000/health`
+Open the web app at `http://localhost:3000`. The API health endpoint is available at `http://localhost:4000/health`.
 
-Without credentials, the editor and deterministic job-match engine work in local mode with browser autosave, Career Vault storage, version snapshots, live scoring, template switching, and exports. Configure the services below to enable cloud sync, imports, private storage, authentication, and DeepSeek proposals.
+The core product works in local mode without Supabase, DeepSeek, or R2 credentials. Add provider values to `.env` when you want authentication, synchronization, private document storage, and server-side AI proposals.
 
-## Configure Supabase
-
-1. Create a Supabase project.
-2. Run the migrations in order:
-   - [`supabase/migrations/202607310001_phase_one.sql`](./supabase/migrations/202607310001_phase_one.sql)
-   - [`supabase/migrations/202607310002_phase_two.sql`](./supabase/migrations/202607310002_phase_two.sql)
-   - [`supabase/migrations/202608010001_phase_three.sql`](./supabase/migrations/202608010001_phase_three.sql)
-   - [`supabase/migrations/202608010002_phase_three_collaboration.sql`](./supabase/migrations/202608010002_phase_three_collaboration.sql)
-   - [`supabase/migrations/202608010003_phase_four_career_intelligence.sql`](./supabase/migrations/202608010003_phase_four_career_intelligence.sql)
-   - [`supabase/migrations/202608010004_phase_four_publishing_organizations.sql`](./supabase/migrations/202608010004_phase_four_publishing_organizations.sql)
-   - [`supabase/migrations/202608010005_free_tier_maintenance.sql`](./supabase/migrations/202608010005_free_tier_maintenance.sql)
-   - [`supabase/migrations/202608010006_direct_maintenance_tables.sql`](./supabase/migrations/202608010006_direct_maintenance_tables.sql)
-3. Enable Email OTP authentication and add local/Vercel redirect URLs.
-4. Set the public Supabase URL and publishable key in Vercel.
-5. Set the URL, publishable key, and secret key in Render.
-
-All exposed tables have Row Level Security enabled. The backend validates the caller's Supabase access token before using its secret-key server connection.
-
-## Configure Cloudflare R2
-
-Create a private `resumora-ai` bucket and an R2 API token scoped to that bucket. Add the explicit S3 endpoint, account ID, access key, secret, and bucket name to Render. Configure bucket CORS for the Vercel production origin before enabling direct browser uploads.
-
-Raw import keys are isolated under `imports/users/{userId}/...`; generated upload URLs expire after ten minutes and include an enforced content type. Add an R2 object lifecycle rule for the `imports/` prefix that expires objects after 60 days. The API's daily cleanup also covers the legacy `users/{userId}/imports/...` layout.
-
-## Configure DeepSeek
-
-Add `DEEPSEEK_API_KEY` to Render. The default model is `deepseek-v4-pro`, DeepSeek's flagship API model as of July 31, 2026. It remains configurable through `DEEPSEEK_MODEL` for future model upgrades.
-
-AI calls are server-side and use structured JSON output. The system prompt prohibits invented skills, employers, qualifications, metrics, or outcomes. Job descriptions are treated as untrusted quoted data. Suggestions appear as user-approved diffs, cite Career Vault evidence IDs, and never overwrite original content automatically.
-
-## Deploy
-
-### Vercel
-
-Import the repository as a monorepo project and set the project root to `apps/web`. Add:
-
-```text
-NEXT_PUBLIC_API_URL=https://<render-service>.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
-```
-
-### Render
-
-The repository includes [`render.yaml`](./render.yaml) configured for Render's Free plan. Create a Blueprint from the repository, set all secrets, and set `WEB_ORIGIN` to the exact Vercel origin. Generate a strong `CRON_SECRET` (at least 32 random bytes) and add it only to Render and the cron provider. The API binds to Render's `PORT` on `0.0.0.0` and exposes `/health`. Resumora uses Supabase's current publishable/secret key pair, while retaining legacy anon/service-role aliases in code for backwards compatibility.
-
-The protected `GET /internal/cron/keepalive` endpoint performs one tiny Supabase liveness toggle directly through the server-only secret client on every call. At most once every 24 hours it also runs the 60-day retention pass, avoiding unnecessary R2 listing operations. It deletes only disposable database history and raw R2 imports; primary resumes, applications, portfolios, outcomes, and organization records remain intact. Configure the cron request with `Authorization: Bearer <CRON_SECRET>` and never put the secret in a URL. `RETENTION_DAYS` defaults to `60` and is constrained to 30–365 days.
-
-## Verification
+## Verify the workspace
 
 ```bash
 npm run typecheck
+npm run lint
 npm test
 npm run build
+npm run check:integrations
 ```
 
-## Product roadmap
+## Deployment model
 
-### Phase 1 — Excellent resume foundation
+- **Web:** `apps/web` on Vercel
+- **API:** `apps/api` on Render or another Node-compatible service
+- **Data and auth:** Supabase Postgres with row-level security
+- **Private files:** Cloudflare R2 through signed URLs
+- **AI:** a configurable DeepSeek model behind the API boundary
 
-- Structured, autosaving editor and semantic document model
-- Five constrained ATS-safe templates
-- PDF, DOCX, and PDF/DOCX/TXT import paths
-- Three-part, explainable readiness analysis
-- Immutable version snapshots
-- Supabase authentication and cloud sync
-- Private R2 storage boundary
-- Truth-preserving DeepSeek rewriting boundary
+See [the architecture guide](./docs/architecture.md) for environment contracts, retention behavior, collaboration rules, scoring semantics, export guarantees, and the current Career Intelligence implementation.
 
-### Phase 2 — Best-in-class AI tailoring
+---
 
-- Career Vault with reusable evidence, achievements, skills, and metrics
-- Base resume → role-specific resume variants with source lineage
-- DeepSeek job parser with a deterministic fallback and required/preferred separation
-- Independent Machine Readability, Job Match, Recruiter Quality, keyword, hard-skill, evidence, and experience signals
-- Claim Ledger linking every AI proposal to verified career evidence
-- Headline, profile, bullet, and cover-letter assistance with explicit review
-- Authenticated persistence contracts for Career Vault records and saved jobs
-- Local-first operation when Supabase or DeepSeek is unavailable
-
-Still scheduled for the next Phase 2 increment: export round-trip parsing that compares PDF/DOCX extraction against the source document, proposal/audit persistence in the UI, and richer semantic/recency scoring.
-
-### Phase 3 — Complete job-search workspace (current)
-
-- Saved jobs and a seven-state application pipeline
-- Tailored resume, cover letter, job snapshot, notes, follow-up, and match score stored per opportunity
-- Job workspace → tracked application handoff with targeted-resume lineage
-- Immutable activity records for status, review, asset, and interview events
-- DeepSeek interview preparation based on the resume, job, and verified Career Vault evidence
-- Deterministic interview fallback, likely themes, answer structures, and questions for the interviewer
-- Authenticated Supabase sync with local-first guest operation
-- Mobile application board, detail workspace, and quick status/plan edits
-- Manifest V3 job capture extension with active-tab access and client-side workspace handoff
-- Expiring, revocable, asset-scoped mentor/reviewer links with comments, approvals, and change requests
-- Local LinkedIn/professional-profile consistency checks without scraping or credentials
-- English, Arabic, French, Spanish, German, and Portuguese document settings with native RTL preview controls
-
-Load the unpacked extension from [`apps/extension`](./apps/extension) during development. Its popup stores the Resumora workspace origin, captures visible job content from the active tab, and passes the payload in a URL fragment that the workspace removes immediately after import.
-
-### Phase 4 — Career intelligence moat (current)
-
-- Unified career-memory retrieval across resumes, Career Vault evidence, applications, reviews, outcomes, and learning plans
-- Versioned Resumora role/skill graph aligned to O*NET's worker, job, and market separation
-- Explainable skill strength with proven, emerging, and gap states tied to verified evidence IDs
-- Target and adjacent career paths with preparation signals and explicit missing evidence
-- Deterministic evidence-building learning plans with DeepSeek refinement and progress tracking
-- Evidence-grounded interview answer coaching with four component scores
-- User-entered, privacy-controlled outcome tracking and application-to-interview signals
-- Workday-, Greenhouse-, and Lever-style parser regression fixtures
-- Local-first guest operation with owner-scoped Supabase sync
-- Portfolio studio with per-record, per-link, and email publication consent
-- Immutable public snapshots that expose only selected verified Career Vault records
-- Immediate portfolio revocation with no anonymous database grants
-- Multi-tenant workspaces for coaches, universities, outplacement teams, and employers
-- Owner, administrator, coach, and participant roles with expiring email-bound invitations
-- Participant-controlled data scopes, consent-filtered summaries, and cohort workspaces
-
-Resumora will continue to avoid deceptive “official ATS score” claims and autonomous mass auto-apply. The product optimizes for truthful fit, document readability, and higher-quality applications.
+Built by [Jabir Khan](https://jabir-khan.vercel.app/) as an exploration of a harder question than “Can AI improve this sentence?”: **Can career software help people communicate their value without inventing it?**
