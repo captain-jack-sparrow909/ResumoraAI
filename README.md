@@ -7,6 +7,8 @@
 <p align="center">
   <a href="https://resumora-ai-web.vercel.app/"><strong>Live product</strong></a>
   ·
+  <a href="./docs/resumora-user-handbook.html"><strong>Visual user handbook</strong></a>
+  ·
   <a href="#product-proof">Product proof</a>
   ·
   <a href="#truth-preserving-ai-boundary">Trust model</a>
