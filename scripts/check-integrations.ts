@@ -41,12 +41,12 @@ async function checkSupabase() {
 
   try {
     const admin = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { error } = await admin.from("resumes").select("id", { head: true, count: "exact" }).limit(1);
+    const { error } = await admin.from("resumes").select("id").limit(1);
     record("Supabase DB", !error, error ? `schema check failed (${error.code ?? "database error"}); apply the Phase 1 migration` : "secret key accepted and resumes table is available");
     const phaseTwoChecks = await Promise.all(
       ["job_postings", "resume_variants", "ai_proposals", "cover_letters"].map(async (table) => ({
         table,
-        result: await admin.from(table).select("id", { head: true, count: "exact" }).limit(1),
+        result: await admin.from(table).select("id").limit(1),
       })),
     );
     const missingPhaseTwo = phaseTwoChecks.find(({ result }) => result.error);
@@ -60,7 +60,7 @@ async function checkSupabase() {
     const phaseThreeChecks = await Promise.all(
       ["applications", "application_activities", "interview_packs", "application_reviews"].map(async (table) => ({
         table,
-        result: await admin.from(table).select("id", { head: true, count: "exact" }).limit(1),
+        result: await admin.from(table).select("id").limit(1),
       })),
     );
     const missingPhaseThree = phaseThreeChecks.find(({ result }) => result.error);
@@ -74,11 +74,11 @@ async function checkSupabase() {
     const collaborationChecks = await Promise.all(
       ["application_review_invites"].map(async (table) => ({
         table,
-        result: await admin.from(table).select("id", { head: true, count: "exact" }).limit(1),
+        result: await admin.from(table).select("id").limit(1),
       })),
     );
     const missingCollaboration = collaborationChecks.find(({ result }) => result.error);
-    const reviewColumnCheck = await admin.from("application_reviews").select("invite_id,decision", { head: true, count: "exact" }).limit(1);
+    const reviewColumnCheck = await admin.from("application_reviews").select("invite_id,decision").limit(1);
     record(
       "Supabase Reviews",
       !missingCollaboration && !reviewColumnCheck.error,
@@ -96,7 +96,7 @@ async function checkSupabase() {
         { table: "career_coaching_sessions", key: "id" },
       ].map(async ({ table, key }) => ({
         table,
-        result: await admin.from(table).select(key, { head: true, count: "exact" }).limit(1),
+        result: await admin.from(table).select(key).limit(1),
       })),
     );
     const missingPhaseFour = phaseFourChecks.find(({ result }) => result.error);
@@ -119,7 +119,7 @@ async function checkSupabase() {
         { table: "organization_cohort_members", key: "cohort_id" },
       ].map(async ({ table, key }) => ({
         table,
-        result: await admin.from(table).select(key, { head: true, count: "exact" }).limit(1),
+        result: await admin.from(table).select(key).limit(1),
       })),
     );
     const missingPublishing = publishingChecks.find(({ result }) => result.error);
